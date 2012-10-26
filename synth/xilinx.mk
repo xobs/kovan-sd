@@ -166,6 +166,8 @@ junk += $(project).twr $(project).twx smartpreview.twr
 $(project)_err.twr: $(project)_par.ncd
 	$(xil_env); trce -e 10 $< $(project).pcf -o $(project)_err.twr
 junk += $(project)_err.twr $(project)_err.twx
+junk += $(project).lso $(project)_bitgen.xwb $(project)_bitgen.xwbt
+junk += usage_statistics_webtalk.html par_usage_statistics.html webtalk.log _xmsgs
 
 .gitignore: $(mkfiles)
 	echo programming_files $(junk) | sed 's, ,\n,g' > .gitignore
