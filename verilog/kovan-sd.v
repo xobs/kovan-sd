@@ -194,13 +194,40 @@ module kovan (
    assign NAND_RB = RB;
 
    assign SD_CS = SD_CS_T;
-   assign SD_DI = SD_DI_T;
+//   assign SD_DI = SD_DI_T;
    assign SD_CLK = SD_CLK_T;
-   assign SD_TURNON = SD_TURNON_T;
+//   assign SD_TURNON = SD_TURNON_T;
    assign SD_DO = SD_DO_T;
-   assign SD_DAT1 = SD_DAT1_T;
+//   assign SD_DAT1 = SD_DAT1_T;
    assign SD_DAT2 = SD_DAT2_T;
    // aaaand SD_CD is playing the part of itself
+
+   assign SD_DO_T = LCD_B[0];
+   assign SD_CS_T = LCD_B[1];
+   assign SD_CLK_T = LCD_B[2];
+   assign SD_DAT2_T = LCD_B[3];
+
+   // Assign dummy values for now, to get it to build
+   assign SD_DI_T = 1'b1;
+   assign DIG_SCLK = 1'b1;
+   assign FPGA_LED = 1'b1;
+   assign DIG_ADC_CS = 1'b1;
+   assign DIG_ADC_SCLK = 1'b1;
+   assign DIG_ADC_OUT = 1'b1;
+   assign MBOT = 1'b1;
+   assign MTOP = 1'b1;
+   assign M_SERVO = 1'b1;
+   assign DIG_RCLK = 1'b1;
+   assign SD_DI = 1'b1;
+   assign SD_DAT1_T = 1'b1;
+   assign MOT_EN = 1'b1;
+   assign DIG_CLR_N = 1'b1;
+   assign DIG_SAMPLE = 1'b1;
+   assign FPGA_MISO = 1'b1;
+   assign DIG_SRLOAD = 1'b1;
+   assign SD_TURNON_T = 1'b1;
+   assign DIG_IN = 1'b1;
+   assign DIG_ADC_IN = 1'b1;
    
    ////////// reset
    reg   	   glbl_reset; // to be used sparingly
@@ -217,19 +244,7 @@ module kovan (
    // i.e., 408 x 262 x 60 Hz (408 is total H width, 320 active, etc.)
    wire            qvga_clkgen_locked;
    
-   clk_wiz_v3_2_qvga qvga_clkgen( .CLK_IN1(clk26buf),
-				  .clk_out6p4(clk_qvga),
-				  .clk_out13(clk13buf),
-				  .clk_out3p25(clk3p2M), // note: a slight overclock (about 2%)
-				  .clk_out208(clk208M),
-				  .RESET(glbl_reset),
-				  .LOCKED(qvga_clkgen_locked) );
    
-   sync_reset  qvga_reset(
-			  .clk(clk_qvga),
-			  .glbl_reset(glbl_reset || !qvga_clkgen_locked),
-			  .reset(lcd_reset) );
-
    // low-skew clock mirroring to an output pin requires this hack
    ODDR2 qvga_clk_to_lcd (.D0(1'b1), .D1(1'b0), 
 			  .C0(clk_qvga), .C1(!clk_qvga), 
@@ -276,63 +291,6 @@ module kovan (
    wire [23:0] servo2_pwm_pulse;
    wire [23:0] servo3_pwm_pulse;
 
-   robot_iface iface(.clk(clk13buf), .glbl_reset(glbl_reset),
-		     .clk_3p2MHz(clk3p2M), .clk_208MHz(clk208M),
-
-	     // digital i/o block
-	     .dig_out_val(dig_out_val),
-	     .dig_oe(dig_oe),
-	     .dig_pu(dig_pu),
-	     .ana_pu(ana_pu),
-	     .dig_in_val(dig_in_val),
-	     .dig_val_good(dig_val_good), // output value is valid when high
-	     .dig_busy(dig_busy),    // chain is busy when high
-	     .dig_sample(dig_sample),  // samples input on rising edge
-	     .dig_update(dig_update),  // updates chain on rising edge
-
-	     // ADC interface
-	     .adc_in(adc_in),
-	     .adc_chan(adc_chan),    // channels 0-7 are for user, 8-15 are for motor current fbk
-	     .adc_valid(adc_valid),
-	     .adc_go(adc_go),  
-
-	     // motor driver interface
-	     .mot_pwm_div(mot_pwm_div),
-	     .mot_pwm_duty(mot_pwm_duty),
-	     .mot_drive_code(mot_drive_code), // 2 bits/chan, 00 = stop, 01 = forward, 10 = rev, 11 = stop
-	     .mot_allstop(mot_allstop),
-
-	     // servo interface
-	     .servo_pwm_period(servo_pwm_period), // total period for the servo update
-	     .servo0_pwm_pulse(servo0_pwm_pulse), // pulse width in absolute time
-	     .servo1_pwm_pulse(servo1_pwm_pulse),
-	     .servo2_pwm_pulse(servo2_pwm_pulse),
-	     .servo3_pwm_pulse(servo3_pwm_pulse),
-
-	     /////// physical interfaces to outside the chip
-	     // motors
-	     .MBOT(MBOT[3:0]),
-	     .MTOP(MTOP[3:0]),
-	     .MOT_EN(MOT_EN),
-	     .M_SERVO(M_SERVO[3:0]),
-
-	     // analog interface
-	     .DIG_ADC_CS(DIG_ADC_CS),
-	     .DIG_ADC_IN(DIG_ADC_IN),
-	     .DIG_ADC_OUT(DIG_ADC_OUT),
-	     .DIG_ADC_SCLK(DIG_ADC_SCLK),
-
-	     // digital interface
-	     .DIG_IN(DIG_IN),
-	     .DIG_OUT(DIG_OUT),
-	     .DIG_RCLK(DIG_RCLK),
-	     .DIG_SAMPLE(DIG_SAMPLE),
-	     .DIG_SCLK(DIG_SCLK),
-	     .DIG_SRLOAD(DIG_SRLOAD),
-	     .DIG_CLR_N(DIG_CLR_N)
-		     );
-   
-
    
   //////////////////////////////////////
   // cheezy low speed clock divider source
@@ -355,10 +313,6 @@ module kovan (
    BUFG clk1M_buf(.I(clk1M_unbuf), .O(clk1M));
 
    wire dna_reset;
-   sync_reset  dna_reset_sync(
-			  .clk(clk1M),
-			  .glbl_reset(glbl_reset),
-			  .reset(dna_reset) );
    
    reg 	dna_pulse;
    reg 	dna_shift;
@@ -439,14 +393,6 @@ module kovan (
 	 endcase // case (DNA_cstate)
       end // else: !if( dna_reset )
    end // always @ (posedge clk1M or posedge ~rstbtn_n)
-
-   ////////////////////////////////
-   // heartbeat
-   ////////////////////////////////
-   pwm heartbeat(.clk812k(clk1M), .pwmout(blue_led),
-		 .bright(12'b0001_1111_1000), .dim(12'b0000_0000_1000) );
-
-   assign FPGA_LED = !blue_led;
 
    
    ////////////////////////////////////////////////////////////////////////////////////
@@ -768,6 +714,7 @@ module kovan (
    wire       SDA_int;
    IOBUF #(.DRIVE(8), .SLEW("SLOW")) IOBUF_sda (.IO(XI2CSDA), .I(1'b0), .T(!SDA_pd), .O(SDA_int));
 
+/*
    i2c_slave host_i2c(
 		      .SCL(XI2CSCL),
 		      .SDA(SDA_int),
@@ -915,6 +862,7 @@ module kovan (
 		      .reg_fe(8'h2),
 		      .reg_ff(8'h0)   // this is the MSB of the extended version field
 		      );
+*/
      
    
    /////// version FF.0002.0001 (log created 10/26/2012)
