@@ -253,6 +253,21 @@ module kovan (
    ODDR2 qvga_clk_to_cpu (.D0(1'b1), .D1(1'b0), 
 			 .C0(clk_qvga), .C1(!clk_qvga), 
 			 .Q(LCD_CLK_T), .CE(1'b1), .R(1'b0), .S(1'b0) );
+   wire[63:0] mem_data;
+   wire[63:0] mem_buffer;
+   wire is_full;
+   wire is_empty;
+
+   fifo fifo(
+      .clk(1'b1),
+      .rst(1'b1),
+      .din(mem_buffer),
+      .wr_en(1'b1),
+      .rd_en(1'b1),
+      .dout(mem_data),
+      .full(is_full),
+      .empty(is_empty)
+   );
 
 
    ///////////////////////////////////////////
