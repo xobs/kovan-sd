@@ -46,19 +46,19 @@ module kovan (
 
 		output wire       SD_CS_T,
 		output wire       SD_DI_T,
-		output wire       SD_CLK_T,
+		output wire       SD_SCLK_T,
 		output wire       SD_TURNON_T,
 		input wire        UK7_BUF_T,
 		output wire       SD_DAT2_T,
 		output wire       SD_DAT1_T,
-		output wire       SD_DO_T,
+		input wire        SD_DO_T,
 
 		output wire [7:0] CAM_D,
-		output wire       CAM_HSYNC,
-		output wire       CAM_MCLKO,
-		output wire       CAM_PCLKI,
-		output wire       CAM_VCLKO,
-		output wire       CAM_VSYNC,
+		input wire        CAM_HSYNC,
+		input wire        CAM_MCLKO,
+		input wire        CAM_VCLKI,
+		input wire        CAM_VCLKO,
+		input wire        CAM_VSYNC,
 
 		// i/o controller digital interfaces
 		output wire [1:0] DIG_ADC_CS,
@@ -103,40 +103,40 @@ module kovan (
 		input wire        I2S_LRCLK1,
 
 		// "LCD" output to SD card
-		input wire 	DA,
-		input wire 	DB,
-		input wire 	DC,
-		input wire 	DD,
-		input wire 	DE,
-		input wire 	DF,
-		input wire 	DG,
-		input wire 	DH,
+		input wire        DA,
+		input wire        DB,
+		input wire        DC,
+		input wire        DD,
+		input wire        DE,
+		input wire        DF,
+		input wire        DG,
+		input wire        DH,
 
-		input wire 	UK0,
-		input wire 	UK1,
-		input wire 	UK2,
-		input wire 	UK3,
-		input wire 	UK4,
-		input wire 	UK5,
-		input wire 	UK6,
+		input wire        UK0,
+		input wire        UK1,
+		input wire        UK2,
+		input wire        UK3,
+		input wire        UK4,
+		input wire        UK5,
+		input wire        UK6,
 		/* UK7 wired elsewhere */
-		input wire 	UK8,
+		input wire        UK8,
 		/* UK9 wired elsewhere */
 
-		input wire 	ALE,
-		input wire 	CLE,
-		input wire 	WE,
-		input wire 	CS,
-		input wire 	RE,
-		input wire 	RB,
+		input wire        ALE,
+		input wire 	      CLE,
+		input wire 	      WE,
+		input wire 	      CS,
+		input wire 	      RE,
+		input wire 	      RB,
 
 		// LCD input from CPU
-		input wire [5:0]  LCD_B, // note no truncation of data in
-		input wire [5:0]  LCD_G,
-		input wire [5:0]  LCD_R,
+		output wire [5:0] LCD_B, // note no truncation of data in
+		output wire [5:0] LCD_G,
+		output wire [5:0] LCD_R,
 		input wire        LCD_DEN,
 		input wire        LCD_HS,
-		input wire [5:0]  LCD_SUPP,
+		output wire [5:0] LCD_SUPP,
 		input wire        LCD_VS,
 		output wire       LCD_CLK_T, // clock is sourced from the FPGA
 		// for forward compatibility with HDMI-synced streams
@@ -160,19 +160,20 @@ module kovan (
 		input wire        OSC_CLK   // 26 mhz clock from CPU
 	);
 
-	///////// clock buffers
+	/* Clock buffers */
 	wire      clk26;
 	wire      clk26ibuf;
-	wire      clk26buf;
-	wire      clk13buf;
-	wire      clk3p2M;
-	wire      clk208M;
-	wire      clk1M;  // wired up in the serial number section
  
 	assign clk26 = OSC_CLK;
 	IBUFG clk26buf_ibuf(.I(clk26), .O(clk26ibuf));
-	BUFG clk26buf_buf (.I(clk26ibuf), .O(clk26buf));
 
+	/* This chunk of memory comes out of the FIFO, and feeds directly into
+	 * the output pins.
+	 */
+	wire [63:0]  mem_output;
+
+
+	/* Wires and pins on the SD card side */
 	wire [7:0] 	  NAND_D;
 	wire [9:0] 	  NAND_UK;
 	wire          NAND_ALE;
@@ -182,16 +183,23 @@ module kovan (
 	wire          NAND_RE;
 	wire          NAND_RB;
 
-	wire          SD_CS;
-	wire          SD_CLK;
-	wire          SD_DO;
-	wire          SD_DAT1;
-	wire          SD_DAT2;
-	wire          SD_TURNON;
-	wire          SD_DI;
+	wire          NAND_TYPE0;
+	wire          NAND_TYPE1;
+	wire          NAND_RW;
 
-	// convenience renaming of signals (mapping from pcb tap names to
-	// informative meanings)
+	/* Wires and pins on the CPU side */
+	wire          SD_CLK_CPU;
+	wire          SD_MOSI_CPU;
+	wire          SD_CS_CPU;
+	wire          SD_TURNON_CPU;
+
+	/* Bog-standard blinky LED counter */
+	reg  [25:0]   LED_COUNTER;
+	wire [25:0]   LED_COUNTER_OUT;
+
+	/* Convenience renaming of signals (mapping from tap board names to
+	 * informative meanings)
+	 */
 	assign NAND_D[7:0] = {DH, DG, DF, DE, DD, DC, DB, DA};
 	assign NAND_UK[9:0] = {UK9_BUF_T, UK8, UK7_BUF_T, UK6, UK5, UK4, UK3, UK2, UK1, UK0};
 	assign NAND_ALE = ALE;
@@ -201,93 +209,120 @@ module kovan (
 	assign NAND_RE = RE;
 	assign NAND_RB = RB;
 
-	assign SD_CS = SD_CS_T;
-	assign SD_CLK = SD_CLK_T;
-	assign SD_DO = SD_DO_T;
-	assign SD_DAT2 = SD_DAT2_T;
 
-	assign SD_DO_T = LCD_B[0];
-	assign SD_CS_T = LCD_B[1];
-	assign SD_CLK_T = LCD_B[2];
-	assign SD_DAT2_T = LCD_B[3];
+	/* Wire up outputs from the CPU directly to SD pins */
+	assign SD_SCLK_T = CAM_VSYNC;
+	assign SD_DI_T = CAM_HSYNC;
+	assign SD_CS_T = CAM_VCLKO;
+	assign SD_TURNON_T = CAM_VCLKI;
 
-	// Assign dummy values for now, to get it to build
-	assign SD_DI_T = 1'b1;
-	assign DIG_SCLK = 1'b1;
-	assign FPGA_LED = 1'b1;
-	assign DIG_ADC_CS = 1'b1;
-	assign DIG_ADC_SCLK = 1'b1;
-	assign DIG_ADC_OUT = 1'b1;
-	assign MBOT = 1'b1;
-	assign MTOP = 1'b1;
-	assign M_SERVO = 1'b1;
-	assign DIG_RCLK = 1'b1;
-	assign SD_DI = 1'b1;
-	assign SD_DAT1_T = 1'b1;
-	assign MOT_EN = 1'b1;
-	assign DIG_CLR_N = 1'b1;
-	assign DIG_SAMPLE = 1'b1;
-	assign FPGA_MISO = 1'b1;
-	assign DIG_SRLOAD = 1'b1;
-	assign SD_TURNON_T = 1'b1;
-	assign DIG_IN = 1'b1;
-	assign DIG_ADC_IN = 1'b1;
-    assign CAM_D = 1'b1;
-	assign CAM_HSYNC = 1'b1;
-	assign CAM_MCLKO = 1'b1;
-	assign CAM_PCLKI = 1'b1;
-	assign CAM_VCLKO = 1'b1;
-	assign CAM_VSYNC = 1'b1;
+	/* These outputs are wired to vestigial hardware, and are unused */
+	assign DIG_SCLK = 1'b0;
+	assign DIG_ADC_CS = 1'b0;
+	assign DIG_ADC_SCLK = 1'b0;
+	assign MBOT = 1'b0;
+	assign MTOP = 1'b0;
+	assign M_SERVO = 1'b0;
+	assign DIG_RCLK = 1'b0;
+	assign MOT_EN = 1'b0;
+	assign DIG_CLR_N = 1'b0;
+	assign DIG_SAMPLE = 1'b0;
+	assign DIG_SRLOAD = 1'b0;
+	assign DIG_IN = 1'b0;
+	assign DIG_ADC_IN = 1'b0;
 
-	assign I2S_DI1 = 1'b1;
-	assign DDC_SDA_PD = 1'b1;
-	assign HPD_OVERRIDE = 1'b1;
-	assign I2S_CDCLK1 = 1'b1;
-	assign I2S_DO0 = 1'b1;
-	assign I2S_LRCLK0 = 1'b1;
-	assign DDC_SDA_PU = 1'b1;
-	assign I2S_CLK0 = 1'b1;
+	/* These are currently unused, but may be used in the future */
+	assign SD_DAT1_T = 1'b0;
+	assign SD_DAT2_T = 1'b0;
+	assign FPGA_MISO = 1'b0;
+	assign I2S_DI1 = 1'b0;
+	assign DDC_SDA_PD = 1'b0;
+	assign HPD_OVERRIDE = 1'b0;
+	assign I2S_CDCLK1 = 1'b0;
+	assign I2S_DO0 = 1'b0;
+	assign I2S_LRCLK0 = 1'b0;
+	assign DDC_SDA_PU = 1'b0;
+	assign I2S_CLK0 = 1'b0;
+	assign LCD_CLK_T = 1'b0;
 
-   
-	////////// reset
-	reg       glbl_reset; // to be used sparingly
-	wire      glbl_reset_edge;
-	reg       glbl_reset_edge_d;
 
-	always @(posedge clk1M) begin
-		glbl_reset_edge_d <= glbl_reset_edge;
-		glbl_reset <= !glbl_reset_edge_d & glbl_reset_edge; // just pulse reset for one cycle of the slowest clock in the system
-	end
-   
-	////////// loop-throughs
-	// lcd runs at a target of 6.41 MHz (156 ns cycle time)
-	// i.e., 408 x 262 x 60 Hz (408 is total H width, 320 active, etc.)
-	wire            qvga_clkgen_locked;
-   
-   
-	// low-skew clock mirroring to an output pin requires this hack
-	ODDR2 qvga_clk_to_lcd (.D0(1'b1), .D1(1'b0), 
-			.C0(clk_qvga), .C1(!clk_qvga), 
-			.Q(LCDO_DOTCLK), .CE(1'b1), .R(1'b0), .S(1'b0) );
 
-	ODDR2 qvga_clk_to_cpu (.D0(1'b1), .D1(1'b0), 
-			.C0(clk_qvga), .C1(!clk_qvga), 
-			.Q(LCD_CLK_T), .CE(1'b1), .R(1'b0), .S(1'b0) );
-	wire [63:0]  mem_data;
-	wire [63:0]  mem_buffer;
-	wire         is_full;
-	wire         is_empty;
-
-	fifo fifo(
-		.clk(1'b1),
-		.rst(1'b1),
-		.din(mem_buffer),
-		.wr_en(1'b1),
-		.rd_en(1'b1),
-		.dout(mem_data),
-		.full(is_full),
-		.empty(is_empty)
+	/* Multiply the incoming 26 MHz clock up to 251 MHz so we can build our
+	 * own edge detector.  We want to trigger an event on a rising edge of
+	 * NAND_WE or the falling edge of NAND_RE.
+	 */
+	wire clk251;
+	fast_clock fast_clock(
+		.CLK_IN1(clk26ibuf),
+		.CLK_OUT1(clk251)
 	);
 
 
+   /* Master chunk of BRAM.  When a sample is taken, it's stored here. */
+	wire [63:0]  mem_input;
+	wire         is_full;
+	wire         is_empty;
+	wire         data_is_valid;
+
+	reg          do_write;
+	wire         do_read;
+
+	assign mem_input[7:0] = NAND_D[7:0];
+	assign mem_input[8] = NAND_ALE;
+	assign mem_input[9] = NAND_CLE;
+	assign mem_input[10] = NAND_CS;
+	assign mem_input[11] = NAND_WE;
+	assign mem_input[12] = NAND_RE;
+	assign mem_input[13] = NAND_RB;
+	assign mem_input[23:14] = NAND_UK[9:0];
+	assign mem_input[49:24] = LED_COUNTER;
+
+	assign CAM_D = mem_output[7:0];
+	assign LCD_R[3] = mem_output[8];
+	assign LCD_R[4] = mem_output[9];
+	assign LCD_R[5] = mem_output[10];
+	assign LCD_G[0] = mem_output[11];
+	assign LCD_G[1] = mem_output[12];
+	assign LCD_G[5:2] = mem_output[27:24];
+	assign LCD_B = mem_output[33:28];
+	assign LCD_SUPP = mem_output[39:34];
+
+	assign do_read = CAM_MCLKO;
+	assign LCD_R[2] = SD_DO_T;
+	assign LCD_R[1] = !is_empty;
+	assign LCD_R[0] = data_is_valid;
+
+	fifo fifo(
+		.clk(clk251),
+		.rst(1'b0),
+		.din(mem_input),
+		.wr_en(do_write),
+		.rd_en(do_read),
+		.dout(mem_output),
+		.full(is_full),
+		.empty(is_empty),
+		.valid(data_is_valid)
+	);
+
+
+
+	/* Everything happens in relation to this 251 MHz clock */
+	assign FPGA_LED = LED_COUNTER[25];
+//	assign FPGA_LED = CAM_VCLKI;
+//	assign SD_TURNON_T = LED_COUNTER[25];
+
+	reg previous_nand_we, previous_nand_re;
+
+	always @(posedge clk251) begin
+		LED_COUNTER <= LED_COUNTER+1;
+		if ((!previous_nand_we && NAND_WE)
+		 || (previous_nand_re && !NAND_RE)) begin
+			do_write = 1;
+		end else begin
+			do_write = 0;
+		end
+
+		previous_nand_we = NAND_WE;
+		previous_nand_re = NAND_RE;
+	end
 endmodule // kovan

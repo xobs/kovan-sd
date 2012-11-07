@@ -44,7 +44,8 @@ module fifo(
   rd_en,
   dout,
   full,
-  empty
+  empty,
+  valid
 );
 
 input clk;
@@ -55,6 +56,7 @@ input rd_en;
 output [63 : 0] dout;
 output full;
 output empty;
+output valid;
 
 // synthesis translate_off
 
@@ -84,7 +86,7 @@ output empty;
     .C_AXIS_TYPE(0),
     .C_COMMON_CLOCK(1),
     .C_COUNT_TYPE(0),
-    .C_DATA_COUNT_WIDTH(12),
+    .C_DATA_COUNT_WIDTH(11),
     .C_DEFAULT_VALUE("BlankString"),
     .C_DIN_WIDTH(64),
     .C_DIN_WIDTH_AXIS(1),
@@ -147,7 +149,7 @@ output empty;
     .C_HAS_SLAVE_CE(0),
     .C_HAS_SRST(0),
     .C_HAS_UNDERFLOW(0),
-    .C_HAS_VALID(0),
+    .C_HAS_VALID(1),
     .C_HAS_WR_ACK(0),
     .C_HAS_WR_DATA_COUNT(0),
     .C_HAS_WR_RST(0),
@@ -167,7 +169,7 @@ output empty;
     .C_OVERFLOW_LOW(0),
     .C_PRELOAD_LATENCY(1),
     .C_PRELOAD_REGS(0),
-    .C_PRIM_FIFO_TYPE("4kx9"),
+    .C_PRIM_FIFO_TYPE("2kx18"),
     .C_PROG_EMPTY_THRESH_ASSERT_VAL(2),
     .C_PROG_EMPTY_THRESH_ASSERT_VAL_AXIS(1022),
     .C_PROG_EMPTY_THRESH_ASSERT_VAL_RACH(1022),
@@ -183,14 +185,14 @@ output empty;
     .C_PROG_EMPTY_TYPE_WACH(0),
     .C_PROG_EMPTY_TYPE_WDCH(0),
     .C_PROG_EMPTY_TYPE_WRCH(0),
-    .C_PROG_FULL_THRESH_ASSERT_VAL(4094),
+    .C_PROG_FULL_THRESH_ASSERT_VAL(2046),
     .C_PROG_FULL_THRESH_ASSERT_VAL_AXIS(1023),
     .C_PROG_FULL_THRESH_ASSERT_VAL_RACH(1023),
     .C_PROG_FULL_THRESH_ASSERT_VAL_RDCH(1023),
     .C_PROG_FULL_THRESH_ASSERT_VAL_WACH(1023),
     .C_PROG_FULL_THRESH_ASSERT_VAL_WDCH(1023),
     .C_PROG_FULL_THRESH_ASSERT_VAL_WRCH(1023),
-    .C_PROG_FULL_THRESH_NEGATE_VAL(4093),
+    .C_PROG_FULL_THRESH_NEGATE_VAL(2045),
     .C_PROG_FULL_TYPE(0),
     .C_PROG_FULL_TYPE_AXIS(0),
     .C_PROG_FULL_TYPE_RACH(0),
@@ -199,10 +201,10 @@ output empty;
     .C_PROG_FULL_TYPE_WDCH(0),
     .C_PROG_FULL_TYPE_WRCH(0),
     .C_RACH_TYPE(0),
-    .C_RD_DATA_COUNT_WIDTH(12),
-    .C_RD_DEPTH(4096),
+    .C_RD_DATA_COUNT_WIDTH(11),
+    .C_RD_DEPTH(2048),
     .C_RD_FREQ(1),
-    .C_RD_PNTR_WIDTH(12),
+    .C_RD_PNTR_WIDTH(11),
     .C_RDCH_TYPE(0),
     .C_REG_SLICE_MODE_AXIS(0),
     .C_REG_SLICE_MODE_RACH(0),
@@ -230,8 +232,8 @@ output empty;
     .C_WACH_TYPE(0),
     .C_WDCH_TYPE(0),
     .C_WR_ACK_LOW(0),
-    .C_WR_DATA_COUNT_WIDTH(12),
-    .C_WR_DEPTH(4096),
+    .C_WR_DATA_COUNT_WIDTH(11),
+    .C_WR_DEPTH(2048),
     .C_WR_DEPTH_AXIS(1024),
     .C_WR_DEPTH_RACH(16),
     .C_WR_DEPTH_RDCH(1024),
@@ -239,7 +241,7 @@ output empty;
     .C_WR_DEPTH_WDCH(1024),
     .C_WR_DEPTH_WRCH(16),
     .C_WR_FREQ(1),
-    .C_WR_PNTR_WIDTH(12),
+    .C_WR_PNTR_WIDTH(11),
     .C_WR_PNTR_WIDTH_AXIS(10),
     .C_WR_PNTR_WIDTH_RACH(4),
     .C_WR_PNTR_WIDTH_RDCH(10),
@@ -258,6 +260,7 @@ output empty;
     .DOUT(dout),
     .FULL(full),
     .EMPTY(empty),
+    .VALID(valid),
     .BACKUP(),
     .BACKUP_MARKER(),
     .SRST(),
@@ -278,7 +281,6 @@ output empty;
     .WR_ACK(),
     .OVERFLOW(),
     .ALMOST_EMPTY(),
-    .VALID(),
     .UNDERFLOW(),
     .DATA_COUNT(),
     .RD_DATA_COUNT(),
