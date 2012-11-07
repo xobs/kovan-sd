@@ -292,12 +292,16 @@ module kovan (
 	assign LCD_R[1] = !is_empty;
 	assign LCD_R[0] = data_is_valid;
 
+
+	/* Values used to determine if a new sample should be read */
+	reg should_read, get_new_sample;
+
 	fifo fifo(
 		.clk(clk251),
 		.rst(1'b0),
 		.din(mem_input),
 		.wr_en(do_write),
-		.rd_en(do_read),
+		.rd_en(get_new_sample),
 		.dout(mem_output),
 		.full(is_full),
 		.empty(is_empty),
@@ -307,22 +311,41 @@ module kovan (
 
 
 	/* Everything happens in relation to this 251 MHz clock */
-	assign FPGA_LED = LED_COUNTER[25];
-//	assign FPGA_LED = CAM_VCLKI;
-//	assign SD_TURNON_T = LED_COUNTER[25];
+	//assign FPGA_LED = LED_COUNTER[25];
+	assign FPGA_LED = is_empty;
 
 	reg previous_nand_we, previous_nand_re;
+	reg previous_do_read;
 
 	always @(posedge clk251) begin
 		LED_COUNTER <= LED_COUNTER+1;
+
+		/* Capture the NAND read/write pins to determine if we have to
+		 * capture a sample and put it in the buffer
+		 */
 		if ((!previous_nand_we && NAND_WE)
 		 || (previous_nand_re && !NAND_RE)) begin
-			do_write = 1;
+			do_write <= 1;
 		end else begin
-			do_write = 0;
+			do_write <= 0;
 		end
 
-		previous_nand_we = NAND_WE;
-		previous_nand_re = NAND_RE;
+		/* If the do_read wire has changed, queue a read */
+		if (!previous_do_read && do_read) begin
+			should_read <= 1;
+		end
+
+		/* Determine if we need to send a new sample out the pins */
+		if (should_read) begin
+			get_new_sample <= 1;
+			should_read <= 0;
+		end else begin
+			get_new_sample <= 0;
+		end
+
+		previous_nand_we <= NAND_WE;
+		previous_nand_re <= NAND_RE;
+		previous_do_read <= do_read;
 	end
+
 endmodule // kovan
