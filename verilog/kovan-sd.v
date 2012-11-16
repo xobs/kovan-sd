@@ -277,16 +277,16 @@ module kovan (
 	assign mem_input[23:14] = NAND_UK[9:0];
 	assign mem_input[49:24] = LED_COUNTER;
 
-	//assign CAM_D      = NAND_D[7:0];
 	assign CAM_D      = mem_output[7:0];
 	assign LCD_R[3]   = mem_output[8];
 	assign LCD_R[4]   = mem_output[9];
 	assign LCD_R[5]   = mem_output[10];
 	assign LCD_G[0]   = mem_output[11];
 	assign LCD_G[1]   = mem_output[12];
-	assign LCD_G[5:2] = mem_output[27:24];
-	assign LCD_B      = mem_output[33:28];
-	assign LCD_SUPP   = mem_output[39:34];
+	assign LCD_G[2]   = mem_output[5];	// Patch, as pin 5 is stuck
+	assign LCD_G[5:3] = mem_output[26:24];
+	assign LCD_B      = mem_output[32:27];
+	assign LCD_SUPP   = mem_output[38:33];
 
 	assign do_read = CAM_MCLKO;
 	assign LCD_R[2] = SD_DO_T;
