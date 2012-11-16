@@ -247,18 +247,18 @@ module kovan (
 
 
 
-	/* Multiply the incoming 26 MHz clock up to 251 MHz so we can build our
+	/* Multiply the incoming 26 MHz clock up to 125 MHz so we can build our
 	 * own edge detector.  We want to trigger an event on a rising edge of
 	 * NAND_WE or the falling edge of NAND_RE.
 	 */
-	wire clk251;
+	wire clk125;
 	fast_clock fast_clock(
 		.CLK_IN1(clk26ibuf),
-		.CLK_OUT1(clk251)
+		.CLK_OUT1(clk125)
 	);
 
 
-   /* Master chunk of BRAM.  When a sample is taken, it's stored here. */
+	/* Master chunk of BRAM.  When a sample is taken, it's stored here. */
 	wire [63:0]  mem_input;
 	wire         is_full;
 	wire         is_empty;
@@ -268,24 +268,25 @@ module kovan (
 	wire         do_read;
 
 	assign mem_input[7:0] = NAND_D[7:0];
-	assign mem_input[8] = NAND_ALE;
-	assign mem_input[9] = NAND_CLE;
-	assign mem_input[10] = NAND_CS;
-	assign mem_input[11] = NAND_WE;
-	assign mem_input[12] = NAND_RE;
-	assign mem_input[13] = NAND_RB;
+	assign mem_input[8]     = NAND_ALE;
+	assign mem_input[9]     = NAND_CLE;
+	assign mem_input[10]    = NAND_CS;
+	assign mem_input[11]    = NAND_WE;
+	assign mem_input[12]    = NAND_RE;
+	assign mem_input[13]    = NAND_RB;
 	assign mem_input[23:14] = NAND_UK[9:0];
 	assign mem_input[49:24] = LED_COUNTER;
 
-	assign CAM_D = mem_output[7:0];
-	assign LCD_R[3] = mem_output[8];
-	assign LCD_R[4] = mem_output[9];
-	assign LCD_R[5] = mem_output[10];
-	assign LCD_G[0] = mem_output[11];
-	assign LCD_G[1] = mem_output[12];
+	//assign CAM_D      = NAND_D[7:0];
+	assign CAM_D      = mem_output[7:0];
+	assign LCD_R[3]   = mem_output[8];
+	assign LCD_R[4]   = mem_output[9];
+	assign LCD_R[5]   = mem_output[10];
+	assign LCD_G[0]   = mem_output[11];
+	assign LCD_G[1]   = mem_output[12];
 	assign LCD_G[5:2] = mem_output[27:24];
-	assign LCD_B = mem_output[33:28];
-	assign LCD_SUPP = mem_output[39:34];
+	assign LCD_B      = mem_output[33:28];
+	assign LCD_SUPP   = mem_output[39:34];
 
 	assign do_read = CAM_MCLKO;
 	assign LCD_R[2] = SD_DO_T;
@@ -294,10 +295,10 @@ module kovan (
 
 
 	/* Values used to determine if a new sample should be read */
-	reg should_read, get_new_sample;
+	reg get_new_sample;
 
 	fifo fifo(
-		.clk(clk251),
+		.clk(clk125),
 		.rst(1'b0),
 		.din(mem_input),
 		.wr_en(do_write),
@@ -310,38 +311,51 @@ module kovan (
 
 
 
-	/* Everything happens in relation to this 251 MHz clock */
-	//assign FPGA_LED = LED_COUNTER[25];
+	/* Everything happens in relation to this 125 MHz clock */
 	assign FPGA_LED = is_empty;
 
 	reg previous_nand_we, previous_nand_re;
 	reg previous_do_read;
 
-	always @(posedge clk251) begin
+	reg [7:0] SAMPLE_COUNTER;
+	reg TOOK_SAMPLE;
+
+	always @(posedge clk125) begin
 		LED_COUNTER <= LED_COUNTER+1;
 
-		/* Capture the NAND read/write pins to determine if we have to
+		/* Compare the NAND read/write pins to determine if we have to
 		 * capture a sample and put it in the buffer
 		 */
-		if ((!previous_nand_we && NAND_WE)
-		 || (previous_nand_re && !NAND_RE)) begin
+		if ((!previous_nand_we &&  NAND_WE)
+		  || (previous_nand_re && !NAND_RE)) begin
 			do_write <= 1;
-		end else begin
+		end
+		else begin
 			do_write <= 0;
 		end
 
-		/* If the do_read wire has changed, queue a read */
+		/* If the do_read wire has gone high, queue a read */
 		if (!previous_do_read && do_read) begin
-			should_read <= 1;
-		end
-
-		/* Determine if we need to send a new sample out the pins */
-		if (should_read) begin
 			get_new_sample <= 1;
-			should_read <= 0;
-		end else begin
+		end
+		else begin
 			get_new_sample <= 0;
 		end
+
+/*
+		SAMPLE_COUNTER <= SAMPLE_COUNTER+1;
+		if (CAM_VCLKI && SAMPLE_COUNTER[6] && !TOOK_SAMPLE) begin
+			do_write <= 1;
+			TOOK_SAMPLE <= 1;
+		end
+		else if (!SAMPLE_COUNTER[6]) begin
+			do_write <= 0;
+			TOOK_SAMPLE <= 0;
+		end
+		else begin
+			do_write <= 0;
+		end
+*/
 
 		previous_nand_we <= NAND_WE;
 		previous_nand_re <= NAND_RE;
