@@ -380,7 +380,7 @@ module kovan (
 			mem_input[63:60] <= 0;
 			do_write         <= 1;
 		end
-		else if (sd_accumulator_ptr > 7) begin
+		else if (sd_accumulator_ptr > 4'd7) begin
 			mem_input[31:0]  <= free_timer;
 			mem_input[35:32] <= 4'b0001;
 			mem_input[43:36] <= sd_register_number;
@@ -389,7 +389,7 @@ module kovan (
 			do_write         <= 1;
 			sd_accumulator_ptr <= 0;
 			sd_accumulator <= 0;
-			if (sd_register_number < 5) begin
+			if (sd_register_number < 4'd5) begin
 				sd_register_number <= sd_register_number+1;
 			end
 			else begin
