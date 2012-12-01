@@ -352,7 +352,7 @@ module kovan (
 
 	reg [7:0] sd_accumulator;
 	reg [3:0] sd_accumulator_ptr;
-	reg [3:0] sd_register_number;
+	reg [7:0] sd_register_number;
 
 	always @(posedge clk125) begin
 		if (reset_clock) begin
