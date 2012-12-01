@@ -211,11 +211,17 @@ module kovan (
 	assign NAND_RB = RB;
 
 
+	/* Assign nice names to the SD input pins */
+	assign SD_CLK_CPU = CAM_VSYNC;
+	assign SD_MOSI_CPU = CAM_HSYNC;
+	assign SD_CS_CPU = CAM_VCLKO;
+	assign SD_TURNON_CPU = CAM_VCLKI;
+
 	/* Wire up outputs from the CPU directly to SD pins */
-	assign SD_SCLK_T = CAM_VSYNC;
-	assign SD_DI_T = CAM_HSYNC;
-	assign SD_CS_T = CAM_VCLKO;
-	assign SD_TURNON_T = CAM_VCLKI;
+	assign SD_SCLK_T = SD_CLK_CPU;
+	assign SD_DI_T = SD_MOSI_CPU;
+	assign SD_CS_T = SD_CS_CPU;
+	assign SD_TURNON_T = SD_TURNON_CPU;
 
 	/* These outputs are wired to vestigial hardware, and are unused */
 	assign DIG_SCLK = 1'b0;
@@ -334,9 +340,13 @@ module kovan (
 
 	reg previous_nand_we, previous_nand_re;
 	reg previous_do_read;
+	reg previous_sd_clk;
+	reg should_capture_cmd;
+	reg should_capture_response;
 
-	reg [7:0] SAMPLE_COUNTER;
-	reg TOOK_SAMPLE;
+	reg [7:0] sd_accumulator;
+	reg [3:0] sd_accumulator_ptr;
+	reg [3:0] sd_register_number;
 
 	always @(posedge clk125) begin
 		TIMESTAMP <= TIMESTAMP+1;
@@ -359,6 +369,21 @@ module kovan (
 			mem_input[63:60] <= 0;
 			do_write         <= 1;
 		end
+		else if (sd_accumulator_ptr > 7) begin
+			mem_input[31:0]  <= TIMESTAMP;
+			mem_input[35:32] <= 1'b0001;
+			mem_input[43:36] <= sd_register_number;
+			mem_input[51:44] <= sd_accumulator;
+			mem_input[63:52] <= 0;
+			do_write         <= 1;
+			sd_accumulator_ptr <= 0;
+			sd_accumulator <= 0;
+			if (sd_register_number < 5) begin
+				sd_register_number <= sd_register_number+1;
+			end
+			else begin
+				sd_register_number <= 0;
+			end
 		else begin
 			do_write <= 0;
 		end
@@ -371,9 +396,17 @@ module kovan (
 			get_new_sample <= 0;
 		end
 
+		/* If the SD line ticks, capture the value */
+		if (previous_sd_clk && !SD_CLK_CPU) begin
+			sd_accumulator[sd_accumulator_ptr] <= SD_MOSI_CPU;
+			sd_accumulator_ptr <= sd_accumulator_ptr+1;
+		end
+			
+
 		previous_nand_we <= NAND_WE;
 		previous_nand_re <= NAND_RE;
 		previous_do_read <= do_read;
+		previous_sd_clk <= SD_CLK_CPU;
 	end
 
 endmodule // kovan
