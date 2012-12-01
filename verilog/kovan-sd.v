@@ -124,11 +124,11 @@ module kovan (
 		/* UK9 wired elsewhere */
 
 		input wire        ALE,
-		input wire 	      CLE,
-		input wire 	      WE,
-		input wire 	      CS,
-		input wire 	      RE,
-		input wire 	      RB,
+		input wire        CLE,
+		input wire        WE,
+		input wire        CS,
+		input wire        RE,
+		input wire        RB,
 
 		// LCD input from CPU
 		output wire [5:0] LCD_B, // note no truncation of data in
@@ -168,10 +168,7 @@ module kovan (
 	IBUFG clk26buf_ibuf(.I(clk26), .O(clk26ibuf));
 
 	/* This set of wires comes out of the FIFO, and feeds into a mux */
-	reg [63:0]  mem_output;
-
-	/* The actual output pins that go from the mux and feed to the CPU */
-	wire [15:0]  output_pins;
+	wire [63:0]  mem_output;
 
 
 	/* Wires and pins on the SD card side */
@@ -195,7 +192,7 @@ module kovan (
 	wire          SD_TURNON_CPU;
 
 	/* Bog-standard blinky LED counter */
-	reg  [31:0]   TIMESTAMP;
+	reg  [32:0]   free_timer;
 
 
 	/* Convenience renaming of signals (mapping from tap board names to
@@ -222,6 +219,9 @@ module kovan (
 	assign SD_DI_T = SD_MOSI_CPU;
 	assign SD_CS_T = SD_CS_CPU;
 	assign SD_TURNON_T = SD_TURNON_CPU;
+
+	/* This is a special case.  It's miswired to USB_OTG_TYPE */
+	assign CAM_D[5] = 1;
 
 	/* These outputs are wired to vestigial hardware, and are unused */
 	assign DIG_SCLK = 1'b0;
@@ -273,41 +273,49 @@ module kovan (
 
 	reg          do_write;
 	wire         do_read;
+	wire         reset_clock;
 
 	/* These allow us to do bank selection for the output register value */
 	wire [1:0]   output_bank;
 	assign output_bank[0] = LCD_HS;
 	assign output_bank[1] = LCD_VS;
+	assign reset_clock = LCD_DEN;
 
-	assign CAM_D[0]   = output_pins[0];
-	assign CAM_D[1]   = output_pins[1];
-	assign CAM_D[2]   = output_pins[2];
-	assign CAM_D[3]   = output_pins[3];
-	assign CAM_D[4]   = output_pins[4];
-	assign LCD_G[2]   = output_pins[5];  // Pin 5 is miswired
-	assign CAM_D[6]   = output_pins[6];
-	assign CAM_D[7]   = output_pins[7];
-	assign LCD_R[3]   = output_pins[8];
-	assign LCD_R[4]   = output_pins[9];
-	assign LCD_R[5]   = output_pins[10];
-	assign LCD_G[0]   = output_pins[11];
-	assign LCD_G[1]   = output_pins[12];
-	assign LCD_G[3]   = output_pins[13];
-	assign LCD_G[4]   = output_pins[14];
-	assign LCD_G[5]   = output_pins[15];
-	assign LCD_B      = 0;
+	/* The actual output pins that go from the mux and feed to the CPU */
+	reg [15:0]   output_reg;
+	assign CAM_D[0]   = output_reg[0];
+	assign CAM_D[1]   = output_reg[1];
+	assign CAM_D[2]   = output_reg[2];
+	assign CAM_D[3]   = output_reg[3];
+	assign CAM_D[4]   = output_reg[4];
+	assign LCD_G[2]   = output_reg[5];  // Pin 5 is miswired
+	assign CAM_D[6]   = output_reg[6];
+	assign CAM_D[7]   = output_reg[7];
+	assign LCD_R[3]   = output_reg[8];
+	assign LCD_R[4]   = output_reg[9];
+	assign LCD_R[5]   = output_reg[10];
+	assign LCD_G[0]   = output_reg[11];
+	assign LCD_G[1]   = output_reg[12];
+	assign LCD_G[3]   = output_reg[13];
+	assign LCD_G[4]   = output_reg[14];
+	assign LCD_G[5]   = output_reg[15];
+	assign LCD_B[0]   = free_timer[32]; // Timer overflow bit
+	assign LCD_B[5:1] = 0;
 	assign LCD_SUPP   = 0;
 
 	/* Mux the output values */
-	always @(mem_output[63:0] or output_bank[1:0]) begin
-		if (output_bank == 1'b10) begin
-			outputs[15:0] <= mem_output[15:0];
-		end else if (output_bank == 1'b01) begin
-			outputs[15:0] <= mem_output[31:16];
-		end else if (output_bank == 1'b10) begin
-			outputs[15:0] <= mem_output[47:32];
-		end else if (output_bank == 1'b11) begin
-			outputs[15:0] <= mem_output[63:48];
+	always @(mem_output or output_bank) begin
+		if (output_bank == 2'b00) begin
+			output_reg[15:0] <= mem_output[15:0];
+
+		end else if (output_bank == 2'b01) begin
+			output_reg[15:0] <= mem_output[31:16];
+
+		end else if (output_bank == 2'b10) begin
+			output_reg[15:0] <= mem_output[47:32];
+
+		end else if (output_bank == 2'b11) begin
+			output_reg[15:0] <= mem_output[63:48];
 		end
 	end
 
@@ -341,23 +349,26 @@ module kovan (
 	reg previous_nand_we, previous_nand_re;
 	reg previous_do_read;
 	reg previous_sd_clk;
-	reg should_capture_cmd;
-	reg should_capture_response;
 
 	reg [7:0] sd_accumulator;
 	reg [3:0] sd_accumulator_ptr;
 	reg [3:0] sd_register_number;
 
 	always @(posedge clk125) begin
-		TIMESTAMP <= TIMESTAMP+1;
+		if (reset_clock) begin
+			free_timer <= 0;
+		end
+		else begin
+			free_timer <= free_timer+1;
+		end
 
 		/* Compare the NAND read/write pins to determine if we have to
 		 * capture a sample and put it in the buffer
 		 */
 		if ((!previous_nand_we &&  NAND_WE)
 		  || (previous_nand_re && !NAND_RE)) begin
-			mem_input[31:0]  <= TIMESTAMP;
-			mem_input[35:32] <= 1'b0000;
+			mem_input[31:0]  <= free_timer;
+			mem_input[35:32] <= 4'b0000;
 			mem_input[43:36] <= NAND_D[7:0];
 			mem_input[44]    <= NAND_ALE;
 			mem_input[45]    <= NAND_CLE;
@@ -370,8 +381,8 @@ module kovan (
 			do_write         <= 1;
 		end
 		else if (sd_accumulator_ptr > 7) begin
-			mem_input[31:0]  <= TIMESTAMP;
-			mem_input[35:32] <= 1'b0001;
+			mem_input[31:0]  <= free_timer;
+			mem_input[35:32] <= 4'b0001;
 			mem_input[43:36] <= sd_register_number;
 			mem_input[51:44] <= sd_accumulator;
 			mem_input[63:52] <= 0;
@@ -384,6 +395,7 @@ module kovan (
 			else begin
 				sd_register_number <= 0;
 			end
+		end
 		else begin
 			do_write <= 0;
 		end
@@ -401,7 +413,7 @@ module kovan (
 			sd_accumulator[sd_accumulator_ptr] <= SD_MOSI_CPU;
 			sd_accumulator_ptr <= sd_accumulator_ptr+1;
 		end
-			
+
 
 		previous_nand_we <= NAND_WE;
 		previous_nand_re <= NAND_RE;
