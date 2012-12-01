@@ -167,15 +167,16 @@ module kovan (
 	assign clk26 = OSC_CLK;
 	IBUFG clk26buf_ibuf(.I(clk26), .O(clk26ibuf));
 
-	/* This chunk of memory comes out of the FIFO, and feeds directly into
-	 * the output pins.
-	 */
-	wire [63:0]  mem_output;
+	/* This set of wires comes out of the FIFO, and feeds into a mux */
+	reg [63:0]  mem_output;
+
+	/* The actual output pins that go from the mux and feed to the CPU */
+	wire [15:0]  output_pins;
 
 
 	/* Wires and pins on the SD card side */
-	wire [7:0] 	  NAND_D;
-	wire [9:0] 	  NAND_UK;
+	wire [7:0]    NAND_D;
+	wire [9:0]    NAND_UK;
 	wire          NAND_ALE;
 	wire          NAND_CLE;
 	wire          NAND_WE;
@@ -194,8 +195,8 @@ module kovan (
 	wire          SD_TURNON_CPU;
 
 	/* Bog-standard blinky LED counter */
-	reg  [25:0]   LED_COUNTER;
-	wire [25:0]   LED_COUNTER_OUT;
+	reg  [31:0]   TIMESTAMP;
+
 
 	/* Convenience renaming of signals (mapping from tap board names to
 	 * informative meanings)
@@ -259,7 +260,7 @@ module kovan (
 
 
 	/* Master chunk of BRAM.  When a sample is taken, it's stored here. */
-	wire [63:0]  mem_input;
+	reg  [63:0]  mem_input;
 	wire         is_full;
 	wire         is_empty;
 	wire         data_is_valid;
@@ -267,26 +268,43 @@ module kovan (
 	reg          do_write;
 	wire         do_read;
 
-	assign mem_input[7:0] = NAND_D[7:0];
-	assign mem_input[8]     = NAND_ALE;
-	assign mem_input[9]     = NAND_CLE;
-	assign mem_input[10]    = NAND_CS;
-	assign mem_input[11]    = NAND_WE;
-	assign mem_input[12]    = NAND_RE;
-	assign mem_input[13]    = NAND_RB;
-	assign mem_input[23:14] = NAND_UK[9:0];
-	assign mem_input[49:24] = LED_COUNTER;
+	/* These allow us to do bank selection for the output register value */
+	wire [1:0]   output_bank;
+	assign output_bank[0] = LCD_HS;
+	assign output_bank[1] = LCD_VS;
 
-	assign CAM_D      = mem_output[7:0];
-	assign LCD_R[3]   = mem_output[8];
-	assign LCD_R[4]   = mem_output[9];
-	assign LCD_R[5]   = mem_output[10];
-	assign LCD_G[0]   = mem_output[11];
-	assign LCD_G[1]   = mem_output[12];
-	assign LCD_G[2]   = mem_output[5];	// Patch, as pin 5 is stuck
-	assign LCD_G[5:3] = mem_output[26:24];
-	assign LCD_B      = mem_output[32:27];
-	assign LCD_SUPP   = mem_output[38:33];
+	assign CAM_D[0]   = output_pins[0];
+	assign CAM_D[1]   = output_pins[1];
+	assign CAM_D[2]   = output_pins[2];
+	assign CAM_D[3]   = output_pins[3];
+	assign CAM_D[4]   = output_pins[4];
+	assign LCD_G[2]   = output_pins[5];  // Pin 5 is miswired
+	assign CAM_D[6]   = output_pins[6];
+	assign CAM_D[7]   = output_pins[7];
+	assign LCD_R[3]   = output_pins[8];
+	assign LCD_R[4]   = output_pins[9];
+	assign LCD_R[5]   = output_pins[10];
+	assign LCD_G[0]   = output_pins[11];
+	assign LCD_G[1]   = output_pins[12];
+	assign LCD_G[3]   = output_pins[13];
+	assign LCD_G[4]   = output_pins[14];
+	assign LCD_G[5]   = output_pins[15];
+	assign LCD_B      = 0;
+	assign LCD_SUPP   = 0;
+
+	/* Mux the output values */
+	always @(mem_output[63:0] or output_bank[1:0]) begin
+		if (output_bank == 1'b10) begin
+			outputs[15:0] <= mem_output[15:0];
+		end else if (output_bank == 1'b01) begin
+			outputs[15:0] <= mem_output[31:16];
+		end else if (output_bank == 1'b10) begin
+			outputs[15:0] <= mem_output[47:32];
+		end else if (output_bank == 1'b11) begin
+			outputs[15:0] <= mem_output[63:48];
+		end
+	end
+
 
 	assign do_read = CAM_MCLKO;
 	assign LCD_R[2] = SD_DO_T;
@@ -294,7 +312,7 @@ module kovan (
 	assign LCD_R[0] = data_is_valid;
 
 
-	/* Values used to determine if a new sample should be read */
+	/* Value used to determine if a new sample should be read */
 	reg get_new_sample;
 
 	fifo fifo(
@@ -321,14 +339,25 @@ module kovan (
 	reg TOOK_SAMPLE;
 
 	always @(posedge clk125) begin
-		LED_COUNTER <= LED_COUNTER+1;
+		TIMESTAMP <= TIMESTAMP+1;
 
 		/* Compare the NAND read/write pins to determine if we have to
 		 * capture a sample and put it in the buffer
 		 */
 		if ((!previous_nand_we &&  NAND_WE)
 		  || (previous_nand_re && !NAND_RE)) begin
-			do_write <= 1;
+			mem_input[31:0]  <= TIMESTAMP;
+			mem_input[35:32] <= 1'b0000;
+			mem_input[43:36] <= NAND_D[7:0];
+			mem_input[44]    <= NAND_ALE;
+			mem_input[45]    <= NAND_CLE;
+			mem_input[46]    <= NAND_WE;
+			mem_input[47]    <= NAND_RE;
+			mem_input[48]    <= NAND_CS;
+			mem_input[49]    <= NAND_RB;
+			mem_input[59:50] <= NAND_UK[9:0];
+			mem_input[63:60] <= 0;
+			do_write         <= 1;
 		end
 		else begin
 			do_write <= 0;
@@ -341,21 +370,6 @@ module kovan (
 		else begin
 			get_new_sample <= 0;
 		end
-
-/*
-		SAMPLE_COUNTER <= SAMPLE_COUNTER+1;
-		if (CAM_VCLKI && SAMPLE_COUNTER[6] && !TOOK_SAMPLE) begin
-			do_write <= 1;
-			TOOK_SAMPLE <= 1;
-		end
-		else if (!SAMPLE_COUNTER[6]) begin
-			do_write <= 0;
-			TOOK_SAMPLE <= 0;
-		end
-		else begin
-			do_write <= 0;
-		end
-*/
 
 		previous_nand_we <= NAND_WE;
 		previous_nand_re <= NAND_RE;
