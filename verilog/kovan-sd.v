@@ -355,6 +355,8 @@ module kovan (
 	reg [7:0] sd_register_number;
 
 	always @(posedge clk125) begin
+
+		/* Always tick the clock (or reset it) */
 		if (reset_clock) begin
 			free_timer <= 0;
 		end
@@ -380,22 +382,6 @@ module kovan (
 			mem_input[63:60] <= 0;
 			do_write         <= 1;
 		end
-		else if (sd_accumulator_ptr > 4'd7) begin
-			mem_input[31:0]  <= free_timer;
-			mem_input[35:32] <= 4'b0001;
-			mem_input[43:36] <= sd_register_number;
-			mem_input[51:44] <= sd_accumulator;
-			mem_input[63:52] <= 0;
-			do_write         <= 1;
-			sd_accumulator_ptr <= 0;
-			sd_accumulator <= 0;
-			if (sd_register_number < 4'd5) begin
-				sd_register_number <= sd_register_number+1;
-			end
-			else begin
-				sd_register_number <= 0;
-			end
-		end
 		else begin
 			do_write <= 0;
 		end
@@ -408,17 +394,9 @@ module kovan (
 			get_new_sample <= 0;
 		end
 
-		/* If the SD line ticks, capture the value */
-		if (previous_sd_clk && !SD_CLK_CPU) begin
-			sd_accumulator[sd_accumulator_ptr] <= SD_MOSI_CPU;
-			sd_accumulator_ptr <= sd_accumulator_ptr+1;
-		end
-
-
 		previous_nand_we <= NAND_WE;
 		previous_nand_re <= NAND_RE;
 		previous_do_read <= do_read;
-		previous_sd_clk <= SD_CLK_CPU;
 	end
 
 endmodule // kovan
