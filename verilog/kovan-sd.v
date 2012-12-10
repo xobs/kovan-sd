@@ -300,7 +300,8 @@ module kovan (
 	assign LCD_G[4]   = output_reg[14];
 	assign LCD_G[5]   = output_reg[15];
 	assign LCD_B[0]   = free_timer[32]; // Timer overflow bit
-	assign LCD_B[5:1] = 0;
+	assign LCD_B[1]   = is_full;        // Whether the FIFO has filled
+	assign LCD_B[5:2] = 0;
 	assign LCD_SUPP   = 0;
 
 	/* Mux the output values */
