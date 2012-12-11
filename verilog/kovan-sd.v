@@ -331,7 +331,8 @@ module kovan (
 	reg get_new_sample;
 
 	fifo fifo(
-		.clk(clk125),
+		.wr_clk(clk125),
+		.rd_clk(clk125),
 		.rst(1'b0),
 		.din(mem_input),
 		.wr_en(do_write),
