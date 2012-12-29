@@ -1,4 +1,4 @@
 all:
-	make -C synth
+	cd synth && ./colormake
 %:
-	make -C synth $*
+	cd synth && ./colormake $*
