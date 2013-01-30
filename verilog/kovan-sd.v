@@ -282,6 +282,7 @@ module kovan (
 
 	/* The actual output pins that go from the mux and feed to the CPU */
 	reg [15:0]   output_reg;
+	assign CAM_D[5]   = 1'b1; // Set OTG connected (due to miswiring)
 	assign CAM_D[0]   = output_reg[0];
 	assign CAM_D[1]   = output_reg[1];
 	assign CAM_D[2]   = output_reg[2];
