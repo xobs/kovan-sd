@@ -161,14 +161,15 @@ module kovan (
 	);
 
 	/* Clock buffers */
-	wire      clk26;
-	wire      clk26ibuf;
+	wire          clk26;
+	wire          clk26ibuf;
+	wire          clk26buf;
+	wire          reset_clock;
+	wire          clk125;
  
-	assign clk26 = OSC_CLK;
-	IBUFG clk26buf_ibuf(.I(clk26), .O(clk26ibuf));
 
 	/* This set of wires comes out of the FIFO, and feeds into a mux */
-	wire [63:0]  mem_output;
+	wire [63:0]   mem_output;
 
 
 	/* Wires and pins on the SD card side */
@@ -191,9 +192,42 @@ module kovan (
 	wire          SD_CS_CPU;
 	wire          SD_TURNON_CPU;
 
-	/* Bog-standard blinky LED counter */
+	/* Standard blinky LED counter */
 	reg  [32:0]   free_timer;
 
+	wire [11:0]   wr_data_count;
+	wire [11:0]   rd_data_count;
+
+	/* Used as part of a rising-edge pulse-generator */
+	reg           did_write_i2c;
+	reg           do_write_i2c;
+	reg           do_write;
+	wire          do_write_i2c_buf;
+ 
+	reg           did_read;
+	reg           last_read;
+	reg           do_read;
+	wire          do_read_buf;
+ 
+	/* Master chunk of BRAM.  When a sample is taken, it's stored here. */
+	reg  [63:0]   mem_input;
+	reg  [63:0]   mem_input_d; /* Buffer one sample back in time */
+	reg           we_s1, we_s2;
+	reg           rd_s1, rd_s2;
+	wire          is_full;
+	wire          is_empty;
+
+	wire [1:0]    output_bank;
+	reg  [15:0]   output_reg;
+
+	wire          SDA_pd;
+	wire          SDA_int;
+
+	reg           previous_nand_we;
+	reg           previous_nand_re;
+	reg           previous_previous_nand_re;
+
+	reg  [31:0]   byte_counter;
 
 	/* Convenience renaming of signals (mapping from tap board names to
 	 * informative meanings)
@@ -229,7 +263,7 @@ module kovan (
 	assign DIG_ADC_SCLK = 1'b0;
 	assign MBOT = 1'b0;
 	assign MTOP = 1'b0;
-	assign M_SERVO = 1'b0;
+	//assign M_SERVO = 1'b0;
 	assign DIG_RCLK = 1'b0;
 	assign MOT_EN = 1'b0;
 	assign DIG_CLR_N = 1'b0;
@@ -253,35 +287,17 @@ module kovan (
 	assign LCD_CLK_T = 1'b0;
 
 
+	assign clk26 = OSC_CLK;
+	IBUFG clk26buf_ibuf(.I(clk26), .O(clk26ibuf));
+	BUFG clk26buf_buf (.I(clk26ibuf), .O(clk26buf));
 
-	/* Multiply the incoming 26 MHz clock up to 125 MHz so we can build our
-	 * own edge detector.  We want to trigger an event on a rising edge of
-	 * NAND_WE or the falling edge of NAND_RE.
-	 */
-	wire clk125;
-	fast_clock fast_clock(
-		.CLK_IN1(clk26ibuf),
-		.CLK_OUT1(clk125)
-	);
-
-
-	/* Master chunk of BRAM.  When a sample is taken, it's stored here. */
-	reg  [63:0]  mem_input;
-	wire         is_full;
-	wire         is_empty;
-
-	reg          do_write;
-	wire         do_read;
-	wire         reset_clock;
 
 	/* These allow us to do bank selection for the output register value */
-	wire [1:0]   output_bank;
 	assign output_bank[0] = LCD_HS;
 	assign output_bank[1] = LCD_VS;
 	assign reset_clock = LCD_DEN;
 
 	/* The actual output pins that go from the mux and feed to the CPU */
-	reg [15:0]   output_reg;
 	assign CAM_D[5]   = 1'b1; // Set OTG connected (due to miswiring)
 	assign CAM_D[0]   = output_reg[0];
 	assign CAM_D[1]   = output_reg[1];
@@ -303,6 +319,39 @@ module kovan (
 	assign LCD_B[5:1] = 0;
 	assign LCD_SUPP   = 0;
 
+
+	assign LCD_R[2] = SD_DO_T;
+	assign LCD_R[1] = !is_empty;
+	assign LCD_R[0] = is_full;
+
+
+	/* Poor-man's diagnostics */
+	wire diag_1, diag_2, diag_3, diag_4;
+	assign M_SERVO[0] = !diag_1;
+	assign M_SERVO[1] = !diag_2;
+	assign M_SERVO[2] = !diag_3;
+	assign M_SERVO[3] = !diag_4;
+	assign FPGA_LED = 1'b1;
+	assign diag_1 = do_write_i2c;
+	assign diag_2 = free_timer[3];
+	assign diag_3 = did_write_i2c;
+	assign diag_4 = do_write_i2c_buf;
+
+
+
+	/* Multiply the incoming 26 MHz clock up to 125 MHz so we can build our
+	 * own edge detector.  We want to trigger an event on a rising edge of
+	 * NAND_WE or the falling edge of NAND_RE.
+	 */
+	fast_clock fast_clock(
+		.CLK_IN1(clk26ibuf),
+		.CLK_OUT1(clk125)
+	);
+
+
+	/* Turn do_read into a clock */
+	assign do_read_buf = CAM_MCLKO;
+
 	/* Mux the output values */
 	always @(mem_output or output_bank) begin
 		if (output_bank == 2'b00) begin
@@ -320,83 +369,165 @@ module kovan (
 	end
 
 
-	assign do_read = CAM_MCLKO;
-	assign LCD_R[2] = SD_DO_T;
-	assign LCD_R[1] = !is_empty;
-	assign LCD_R[0] = is_full;
+	/* I2C driver */
+	IOBUF #(.DRIVE(8), .SLEW("SLOW")) IOBUF_sda (
+		.IO(XI2CSDA),
+		 .I(1'b0),
+		 .T(!SDA_pd),
+		 .O(SDA_int)
+	);
+	i2c_slave host_i2c(
+		.SCL(XI2CSCL),
+		.SDA(SDA_int),
+		.SDA_pd(SDA_pd),
+
+		.clk(clk26buf),
+		.glbl_reset(1'b0),
+
+		.i2c_device_addr(8'h3C),
+
+		/* Inputs */
+		.reg_0(do_write_i2c_buf),
+		.reg_1(do_read_i2c_buf),
+
+		/* Outputs */
+		.reg_8(byte_counter[7:0]),
+		.reg_9(byte_counter[15:8]),
+		.reg_a(byte_counter[23:16]),
+		.reg_b(byte_counter[31:24]),
+
+		.reg_c(free_timer[7:0]),
+		.reg_d(is_full),
+		.reg_e(is_empty),
+		.reg_f(8'hBE),
+
+		.reg_18(8'h42)
+	);
 
 
-	/* Value used to determine if a new sample should be read */
-	reg get_new_sample;
-
-	fifo fifo(
-		.wr_clk(clk125),
-		.rd_clk(clk125),
+	/* Captured samples temporarily get stored here */
+	fifo sample_buffer(
 		.rst(1'b0),
-		.din(mem_input),
+
 		.wr_en(do_write),
-		.rd_en(get_new_sample),
+		.wr_clk(clk125),
+
+		.rd_en(do_read),
+		.rd_clk(clk26buf),
+
+		.wr_data_count(wr_data_count),
+		.rd_data_count(rd_data_count),
+
+		.din(mem_input_d),
 		.dout(mem_output),
+
 		.full(is_full),
 		.empty(is_empty)
 	);
 
 
+	/* Promary edge detector loop */
 
-	/* Everything happens in relation to this 125 MHz clock */
-	assign FPGA_LED = is_empty;
+	always @(posedge clk26buf) begin
+		if (!do_read_buf) begin
+			did_read <= 0;
+			do_read <= 0;
+		end
+		else if (!did_read) begin
+			did_read <= 1;
+			do_read <= 1;
+		end else begin
+			did_read <= 1;
+			do_read <= 0;
+		end
+	end
 
-	reg previous_nand_we, previous_nand_re;
-	reg previous_do_read;
-	reg previous_sd_clk;
-
-	reg [7:0] sd_accumulator;
-	reg [3:0] sd_accumulator_ptr;
-	reg [7:0] sd_register_number;
 
 	always @(posedge clk125) begin
+		if (!do_write_i2c_buf) begin
+			did_write_i2c <= 0;
+			do_write_i2c <= 0;
+		end
+		else if (!did_write_i2c) begin
+			did_write_i2c <= 1;
+			do_write_i2c <= 1;
+		end else begin
+			did_write_i2c <= 1;
+			do_write_i2c <= 0;
+		end
 
 		/* Always tick the clock (or reset it) */
-		if (reset_clock) begin
+		if (reset_clock)
 			free_timer <= 0;
+		else
+			free_timer <= free_timer+1;
+
+		/* Pipeline the data one deep so we can 'reach back in time' */
+		mem_input[31:0]  <= free_timer;
+		mem_input[35:32] <= 4'b0000;
+		mem_input[43:36] <= NAND_D[7:0];
+		mem_input[44]    <= NAND_ALE;
+		mem_input[45]    <= NAND_CLE;
+		mem_input[46]    <= NAND_WE;
+		mem_input[47]    <= NAND_RE;
+		mem_input[48]    <= NAND_CS;
+		mem_input[49]    <= NAND_RB;
+		mem_input[59:50] <= NAND_UK[9:0];
+		mem_input[63:60] <= 0;
+
+		we_s1            <= WE;
+		we_s2            <= we_s1;
+		previous_nand_we <= we_s2;
+
+		rd_s1                     <= RE;
+		rd_s2                     <= rd_s1;
+		previous_nand_re          <= rd_s2;
+		previous_previous_nand_re <= previous_nand_re;
+
+		//do_write <= (((!previous_nand_re) & previous_previous_nand_re))
+		//	  | (((!previous_nand_we) & we_s2));
+		if (((!previous_nand_re) & previous_previous_nand_re)
+			  | (((!previous_nand_we) & we_s2)) ) begin
+			do_write <= 1;
+			byte_counter <= byte_counter+1;
 		end
 		else begin
-			free_timer <= free_timer+1;
+			do_write <= 0;
+			byte_counter <= byte_counter;
 		end
 
 		/* Compare the NAND read/write pins to determine if we have to
 		 * capture a sample and put it in the buffer
 		 */
-		if ((!previous_nand_we &&  NAND_WE)
-		  || (previous_nand_re && !NAND_RE)) begin
-			mem_input[31:0]  <= free_timer;
-			mem_input[35:32] <= 4'b0000;
-			mem_input[43:36] <= NAND_D[7:0];
-			mem_input[44]    <= NAND_ALE;
-			mem_input[45]    <= NAND_CLE;
-			mem_input[46]    <= NAND_WE;
-			mem_input[47]    <= NAND_RE;
-			mem_input[48]    <= NAND_CS;
-			mem_input[49]    <= NAND_RB;
-			mem_input[59:50] <= NAND_UK[9:0];
-			mem_input[63:60] <= 0;
-			do_write         <= 1;
+		if ((!previous_nand_we) && we_s2) begin
+			// grab from 'reach back' so *before* edge
+			mem_input_d[45:0]  <= mem_input[45:0];
+			mem_input_d[46]    <= 1'b1; // WE
+			mem_input_d[47]    <= 1'b0; // RE
+			mem_input_d[63:48] <= mem_input[63:48];
+		end
+		else if((!previous_nand_re) && previous_previous_nand_re) begin
+			// grab two cycles after falling edge,
+			// to give time for NAND to produce data
+			mem_input_d[31:0]  <= free_timer;
+			mem_input_d[35:32] <= 4'b0000;
+			mem_input_d[43:36] <= NAND_D[7:0];
+			mem_input_d[44]    <= NAND_ALE;
+			mem_input_d[45]    <= NAND_CLE;
+			mem_input_d[46]    <= 1'b0; // WE
+			mem_input_d[47]    <= 1'b1; // RE
+			mem_input_d[48]    <= NAND_CS;
+			mem_input_d[49]    <= NAND_RB;
+			mem_input_d[59:50] <= NAND_UK[9:0];
+			mem_input_d[63:60] <= 0;
 		end
 		else begin
-			do_write <= 0;
+			mem_input_d[63:48] <= mem_input_d[63:48];
+			mem_input_d[47]    <= 1'b0; // clear these
+			mem_input_d[46]    <= 1'b0;
+			mem_input_d[45:0]  <= mem_input_d[45:0];
 		end
 
-		/* If the do_read wire has gone high, queue a read */
-		if (!previous_do_read && do_read) begin
-			get_new_sample <= 1;
-		end
-		else begin
-			get_new_sample <= 0;
-		end
-
-		previous_nand_we <= NAND_WE;
-		previous_nand_re <= NAND_RE;
-		previous_do_read <= do_read;
 	end
 
 endmodule // kovan
