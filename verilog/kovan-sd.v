@@ -335,11 +335,6 @@ module kovan (
 	assign M_SERVO[1] = !diag_2;
 	assign M_SERVO[2] = !diag_3;
 	assign M_SERVO[3] = !diag_4;
-	assign FPGA_LED = 1'b1;
-	assign diag_1 = do_write_i2c;
-	assign diag_2 = free_timer[3];
-	assign diag_3 = did_write_i2c;
-	assign diag_4 = do_write_i2c_buf;
 
 
 	/* Turn do_read into a clock */
@@ -578,5 +573,11 @@ module kovan (
 		end
 
 	end
+
+	assign FPGA_LED = fifo_has_drained;
+	assign diag_1 = do_write_i2c;
+	assign diag_2 = free_timer[3];
+	assign diag_3 = did_write_i2c;
+	assign diag_4 = do_write_i2c_buf;
 
 endmodule // kovan
