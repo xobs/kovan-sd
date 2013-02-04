@@ -391,10 +391,10 @@ module kovan (
 		.reg_1(do_read_i2c_buf),
 
 		/* Outputs */
-		.reg_8(byte_counter[7:0]),
-		.reg_9(byte_counter[15:8]),
-		.reg_a(byte_counter[23:16]),
-		.reg_b(byte_counter[31:24]),
+		.reg_8(byte_counter[31:24]),
+		.reg_9(byte_counter[23:16]),
+		.reg_a(byte_counter[15:8]),
+		.reg_b(byte_counter[7:0]),
 
 		.reg_c(free_timer[7:0]),
 		.reg_d(is_full),
@@ -413,7 +413,7 @@ module kovan (
 		.wr_clk(clk125),
 
 		.rd_en(do_read),
-		.rd_clk(clk26buf),
+		.rd_clk(clk125),
 
 		.wr_data_count(wr_data_count),
 		.rd_data_count(rd_data_count),
@@ -429,17 +429,6 @@ module kovan (
 	/* Promary edge detector loop */
 
 	always @(posedge clk26buf) begin
-		if (!do_read_buf) begin
-			did_read <= 0;
-			do_read <= 0;
-		end
-		else if (!did_read) begin
-			did_read <= 1;
-			do_read <= 1;
-		end else begin
-			did_read <= 1;
-			do_read <= 0;
-		end
 	end
 
 
@@ -456,11 +445,36 @@ module kovan (
 			do_write_i2c <= 0;
 		end
 
+		if (!do_read_buf) begin
+			did_read <= 0;
+			do_read <= 0;
+		end
+		else if (!did_read) begin
+			did_read <= 1;
+			do_read <= 1;
+		end else begin
+			did_read <= 1;
+			do_read <= 0;
+		end
+
 		/* Always tick the clock (or reset it) */
-		if (reset_clock)
+		if (reset_clock) begin
 			free_timer <= 0;
-		else
+			do_write <= 0;
+			byte_counter <= 0;
+		end
+		else begin
+			if (((!previous_nand_re) & previous_previous_nand_re)
+			  | (((!previous_nand_we) & we_s2)) ) begin
+				do_write <= 1;
+				byte_counter <= byte_counter+1;
+			end
+			else begin
+				do_write <= 0;
+				byte_counter <= byte_counter;
+			end
 			free_timer <= free_timer+1;
+		end
 
 		/* Pipeline the data one deep so we can 'reach back in time' */
 		mem_input[31:0]  <= free_timer;
@@ -484,17 +498,6 @@ module kovan (
 		previous_nand_re          <= rd_s2;
 		previous_previous_nand_re <= previous_nand_re;
 
-		//do_write <= (((!previous_nand_re) & previous_previous_nand_re))
-		//	  | (((!previous_nand_we) & we_s2));
-		if (((!previous_nand_re) & previous_previous_nand_re)
-			  | (((!previous_nand_we) & we_s2)) ) begin
-			do_write <= 1;
-			byte_counter <= byte_counter+1;
-		end
-		else begin
-			do_write <= 0;
-			byte_counter <= byte_counter;
-		end
 
 		/* Compare the NAND read/write pins to determine if we have to
 		 * capture a sample and put it in the buffer
