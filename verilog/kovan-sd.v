@@ -208,6 +208,7 @@ module kovan (
 	reg           last_read;
 	reg           do_read;
 	wire          do_read_buf;
+	reg           do_read_buf_last;
  
 	/* Master chunk of BRAM.  When a sample is taken, it's stored here. */
 	reg  [63:0]   mem_input;
@@ -228,7 +229,13 @@ module kovan (
 	reg           previous_previous_nand_re;
 
 	reg  [31:0]   byte_counter;
+	reg  [31:0]   block_skip;
+	reg  [31:0]   block_skip_target;
+	wire [31:0]   block_skip_input;
 
+	reg           fifo_drain_state;
+	reg           fifo_has_drained;
+	reg  [31:0]   fifo_error_conditions;
 	/* Convenience renaming of signals (mapping from tap board names to
 	 * informative meanings)
 	 */
@@ -386,11 +393,11 @@ module kovan (
 
 		.i2c_device_addr(8'h3C),
 
-		/* Inputs */
+		/* Input bank 0 */
 		.reg_0(do_write_i2c_buf),
 		.reg_1(do_read_i2c_buf),
 
-		/* Outputs */
+		/* Output bank 0 */
 		.reg_8(byte_counter[31:24]),
 		.reg_9(byte_counter[23:16]),
 		.reg_a(byte_counter[15:8]),
@@ -401,7 +408,22 @@ module kovan (
 		.reg_e(is_empty),
 		.reg_f(8'hBE),
 
-		.reg_18(8'h42)
+		/* Input bank 1 */
+		.reg_10(block_skip_input[31:24]),
+		.reg_11(block_skip_input[23:16]),
+		.reg_12(block_skip_input[15:8]),
+		.reg_13(block_skip_input[7:0]),
+
+		/* Output bank 1 */
+		.reg_18(fifo_error_conditions[31:24]),
+		.reg_19(fifo_error_conditions[23:16]),
+		.reg_1a(fifo_error_conditions[15:8]),
+		.reg_1b(fifo_error_conditions[7:0]),
+
+		.reg_1c(rd_data_count[11:8]),
+		.reg_1d(rd_data_count[7:0]),
+		.reg_1e(wr_data_count[11:8]),
+		.reg_1f(wr_data_count[7:0])
 	);
 
 
@@ -426,13 +448,32 @@ module kovan (
 	);
 
 
-	/* Promary edge detector loop */
-
+	/* Once the buffer has filled up completely, let it drain first */
 	always @(posedge clk26buf) begin
+
+		/* "Filling" state.  Wait until is_full is set. */
+		if (fifo_drain_state == 1'b0) begin
+			fifo_has_drained <= 1'b1;
+			if (is_full)
+				fifo_drain_state <= 1'b1;
+		end
+
+		/* "Draining" state.  Wait until is_empty is set. */
+		else if (fifo_drain_state == 1'b1) begin
+			fifo_has_drained <= 1'b0;
+			if (is_empty)
+				fifo_drain_state <= 1'b0;
+		end
 	end
 
-
+	/* Promary edge detector loop */
 	always @(posedge clk125) begin
+
+		if (block_skip_input != block_skip_target) begin
+			block_skip <= block_skip_input;
+			block_skip_target <= block_skip_input;
+		end
+
 		if (!do_write_i2c_buf) begin
 			did_write_i2c <= 0;
 			do_write_i2c <= 0;
@@ -445,16 +486,20 @@ module kovan (
 			do_write_i2c <= 0;
 		end
 
-		if (!do_read_buf) begin
+		/* Three-state machine to do reads */
+		if (do_read_buf == do_read_buf_last) begin
 			did_read <= 0;
 			do_read <= 0;
+			do_read_buf_last <= do_read_buf;
 		end
 		else if (!did_read) begin
 			did_read <= 1;
 			do_read <= 1;
+			do_read_buf_last <= do_read_buf;
 		end else begin
 			did_read <= 1;
 			do_read <= 0;
+			do_read_buf_last <= do_read_buf;
 		end
 
 		/* Always tick the clock (or reset it) */
@@ -462,16 +507,32 @@ module kovan (
 			free_timer <= 0;
 			do_write <= 0;
 			byte_counter <= 0;
+			block_skip <= block_skip;
+			fifo_error_conditions <= 0;
 		end
 		else begin
 			if (((!previous_nand_re) & previous_previous_nand_re)
-			  | (((!previous_nand_we) & we_s2)) ) begin
-				do_write <= 1;
+			 | (((!previous_nand_we) & we_s2)) ) begin
+				if (block_skip > 0) begin
+					block_skip <= block_skip-1;
+					do_write <= 0;
+					fifo_error_conditions <= 0;
+				end
+				else begin
+					block_skip <= 0;
+					do_write <= 1 & fifo_has_drained;
+					if (fifo_has_drained)
+						fifo_error_conditions <= fifo_error_conditions+1;
+					else
+						fifo_error_conditions <= fifo_error_conditions;
+				end
 				byte_counter <= byte_counter+1;
 			end
 			else begin
 				do_write <= 0;
+				block_skip <= block_skip;
 				byte_counter <= byte_counter;
+				fifo_error_conditions <= 0;
 			end
 			free_timer <= free_timer+1;
 		end
