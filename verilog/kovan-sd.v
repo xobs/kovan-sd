@@ -287,10 +287,6 @@ module kovan (
 	assign LCD_CLK_T = 1'b0;
 
 
-	assign clk26 = OSC_CLK;
-	IBUFG clk26buf_ibuf(.I(clk26), .O(clk26ibuf));
-	BUFG clk26buf_buf (.I(clk26ibuf), .O(clk26buf));
-
 
 	/* These allow us to do bank selection for the output register value */
 	assign output_bank[0] = LCD_HS;
@@ -338,6 +334,13 @@ module kovan (
 	assign diag_4 = do_write_i2c_buf;
 
 
+	/* Turn do_read into a clock */
+	assign do_read_buf = CAM_MCLKO;
+
+	assign clk26 = OSC_CLK;
+	IBUFG clk26buf_ibuf(.I(clk26), .O(clk26ibuf));
+	BUFG clk26buf_buf (.I(clk26ibuf), .O(clk26buf));
+
 
 	/* Multiply the incoming 26 MHz clock up to 125 MHz so we can build our
 	 * own edge detector.  We want to trigger an event on a rising edge of
@@ -348,9 +351,6 @@ module kovan (
 		.CLK_OUT1(clk125)
 	);
 
-
-	/* Turn do_read into a clock */
-	assign do_read_buf = CAM_MCLKO;
 
 	/* Mux the output values */
 	always @(mem_output or output_bank) begin
