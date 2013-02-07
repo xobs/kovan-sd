@@ -608,7 +608,7 @@ module i2c_slave (
    assign reg_6 = I2C_regblock[5'h6];
    assign reg_7 = I2C_regblock[5'h7];
 
-   assign reg_10 = I2C_regblock[5'h11];
+   assign reg_10 = I2C_regblock[5'h10];
    assign reg_11 = I2C_regblock[5'h11];
    assign reg_12 = I2C_regblock[5'h12];
    assign reg_13 = I2C_regblock[5'h13];
@@ -617,7 +617,7 @@ module i2c_slave (
    assign reg_16 = I2C_regblock[5'h16];
    assign reg_17 = I2C_regblock[5'h17];
 
-   assign reg_20 = I2C_regblock[5'h21];
+   assign reg_20 = I2C_regblock[5'h20];
    assign reg_21 = I2C_regblock[5'h21];
    assign reg_22 = I2C_regblock[5'h22];
    assign reg_23 = I2C_regblock[5'h23];
