@@ -203,6 +203,7 @@ module kovan (
 	reg           do_write_i2c;
 	reg           do_write;
 	wire          do_write_i2c_buf;
+	wire          pause_writing;
  
 	reg           did_read;
 	reg           last_read;
@@ -392,6 +393,7 @@ module kovan (
 		/* Input bank 0 */
 		.reg_0(do_write_i2c_buf),
 		.reg_1(do_read_i2c_buf),
+		.reg_2(pause_writing),
 
 		/* Output bank 0 */
 		.reg_8(byte_counter[31:24]),
@@ -399,9 +401,9 @@ module kovan (
 		.reg_a(byte_counter[15:8]),
 		.reg_b(byte_counter[7:0]),
 
-		.reg_c(free_timer[7:0]),
-		.reg_d(is_full),
-		.reg_e(is_empty),
+		.reg_c(0),
+		.reg_d(0),
+		.reg_e(0),
 		.reg_f(8'hBE),
 
 		/* Input bank 1 */
@@ -411,6 +413,10 @@ module kovan (
 		.reg_13(block_skip_input[7:0]),
 
 		/* Output bank 1 */
+		.reg_18(block_skip[31:24]),
+		.reg_19(block_skip[23:16]),
+		.reg_1a(block_skip[15:8]),
+		.reg_1b(block_skip[7:0]),
 		.reg_1c(rd_data_count[12:8]),
 		.reg_1d(rd_data_count[7:0]),
 		.reg_1e(wr_data_count[12:8]),
@@ -498,9 +504,12 @@ module kovan (
 				end
 				else begin
 					block_skip <= 0;
-					do_write <= 1 & fifo_has_drained;
+					do_write <= 1
+						  & fifo_has_drained
+						  & (!pause_writing);
 				end
 				byte_counter <= byte_counter+1;
+				block_skip_target <= block_skip_target;
 			end
 			else begin
 				do_write <= 0;
@@ -512,6 +521,7 @@ module kovan (
 				end
 				else begin
 					block_skip <= block_skip;
+					block_skip_target <= block_skip_target;
 				end
 			end
 			free_timer <= free_timer+1;
@@ -574,6 +584,7 @@ module kovan (
 
 	end
 
+	/* Debug */
 	assign FPGA_LED = fifo_has_drained;
 	assign diag_1 = do_write_i2c;
 	assign diag_2 = free_timer[3];
