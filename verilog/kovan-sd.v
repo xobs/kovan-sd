@@ -161,68 +161,45 @@ module kovan (
 	);
 
 	/* Clock buffers */
-	wire          clk26;
-	wire          clk26ibuf;
-	wire          clk26buf;
-	wire          reset_clock;
-	wire          clk125;
+	wire		clk26;
+	wire		clk26ibuf;
+	wire		clk26buf;
+	wire		clk125;
  
 
 	/* This set of wires comes out of the FIFO, and feeds into a mux */
-	wire [63:0]   mem_output;
+	wire [63:0]	mem_output;
 
 
 	/* Wires and pins on the SD card side */
-	wire [7:0]    NAND_D;
-	wire [9:0]    NAND_UK;
-	wire          NAND_ALE;
-	wire          NAND_CLE;
-	wire          NAND_WE;
-	wire          NAND_CS;
-	wire          NAND_RE;
-	wire          NAND_RB;
+	wire [7:0]	nand_d;
+	wire [9:0]	nand_uk;
+	wire		nand_ale;
+	wire		nand_cle;
+	wire		nand_we;
+	wire		nand_cs;
+	wire		nand_re;
+	wire		nand_rb;
 
-	wire          NAND_TYPE0;
-	wire          NAND_TYPE1;
-	wire          NAND_RW;
+	wire		ap_bus_empty;
+	wire		ap_bus_full;
+	wire		ap_bus_read;
+	wire		ap_bus_reset;
 
-	/* Wires and pins on the CPU side */
-	wire          SD_CLK_CPU;
-	wire          SD_MOSI_CPU;
-	wire          SD_CS_CPU;
-	wire          SD_TURNON_CPU;
+	wire		ap_sd_cs;
+	wire		ap_sd_di;
+	wire		ap_sd_clk;
+	wire		ap_sd_turnon;
+	wire		ap_sd_do;
+	wire		ap_sd_dat1;
+	wire		ap_sd_dat2;
 
 	/* Standard blinky LED counter */
-	reg  [32:0]   free_timer;
-
-	wire [12:0]   wr_data_count;
-	wire [12:0]   rd_data_count;
-
-	/* Used as part of a rising-edge pulse-generator */
-	reg           did_write_i2c;
-	reg           do_write_i2c;
-	reg           do_write;
-	wire          do_write_i2c_buf;
-	wire          pause_writing;
- 
-	reg           did_read;
-	reg           last_read;
-	reg           do_read;
-	wire          do_read_buf;
-	reg           do_read_s1;
-	reg           do_read_s2;
-	reg           do_read_buf_last;
- 
-	/* Master chunk of BRAM.  When a sample is taken, it's stored here. */
-	reg  [63:0]   mem_input;
-	reg  [63:0]   mem_input_d; /* Buffer one sample back in time */
-	reg           we_s1, we_s2;
-	reg           rd_s1, rd_s2;
-	wire          is_full;
-	wire          is_empty;
+	wire [12:0]	wr_data_count;
+	wire [12:0]	rd_data_count;
 
 	wire [1:0]    output_bank;
-	reg  [15:0]   output_reg;
+	wire [15:0]   output_reg;
 
 	wire          SDA_pd;
 	wire          SDA_int;
@@ -236,62 +213,45 @@ module kovan (
 	reg  [31:0]   block_skip_target;
 	wire [31:0]   block_skip_input;
 
-	reg           fifo_drain_state;
-	reg           fifo_has_drained;
 	/* Convenience renaming of signals (mapping from tap board names to
 	 * informative meanings)
 	 */
-	assign NAND_D[7:0] = {DH, DG, DF, DE, DD, DC, DB, DA};
-	assign NAND_UK[9:0] = {UK9_BUF_T, UK8, UK7_BUF_T, UK6, UK5, UK4, UK3, UK2, UK1, UK0};
-	assign NAND_ALE = ALE;
-	assign NAND_CLE = CLE;
-	assign NAND_WE = WE;
-	assign NAND_CS = CS;
-	assign NAND_RE = RE;
-	assign NAND_RB = RB;
+	assign nand_d[7:0] = {DH, DG, DF, DE, DD, DC, DB, DA};
+	assign nand_uk[9:0] = {UK9_BUF_T, UK8, UK7_BUF_T, UK6, UK5, UK4, UK3, UK2, UK1, UK0};
+	assign nand_ale = ALE;
+	assign nand_cle = CLE;
+	assign nand_we = WE;
+	assign nand_cs = CS;
+	assign nand_re = RE;
+	assign nand_rb = RB;
 
-
-	/* Assign nice names to the SD input pins */
-	assign SD_CLK_CPU = CAM_VSYNC;
-	assign SD_MOSI_CPU = CAM_HSYNC;
-	assign SD_CS_CPU = CAM_VCLKO;
-	assign SD_TURNON_CPU = CAM_VCLKI;
-
-	/* Wire up outputs from the CPU directly to SD pins */
-	assign SD_SCLK_T = SD_CLK_CPU;
-	assign SD_DI_T = SD_MOSI_CPU;
-	assign SD_CS_T = SD_CS_CPU;
-	assign SD_TURNON_T = SD_TURNON_CPU;
 
 	/* This is a special case.  It's miswired to USB_OTG_TYPE */
 	assign CAM_D[5] = 1;
 
 	/* These outputs are wired to vestigial hardware, and are unused */
+	assign MBOT = 1'b0;
+	assign MTOP = 1'b0;
+	assign MOT_EN = 1'b0;
 	assign DIG_SCLK = 1'b0;
 	assign DIG_ADC_CS = 1'b0;
 	assign DIG_ADC_SCLK = 1'b0;
-	assign MBOT = 1'b0;
-	assign MTOP = 1'b0;
-	//assign M_SERVO = 1'b0;
 	assign DIG_RCLK = 1'b0;
-	assign MOT_EN = 1'b0;
 	assign DIG_CLR_N = 1'b0;
 	assign DIG_SAMPLE = 1'b0;
 	assign DIG_SRLOAD = 1'b0;
 	assign DIG_IN = 1'b0;
 	assign DIG_ADC_IN = 1'b0;
+	assign DDC_SDA_PD = 1'b0;
+	assign DDC_SDA_PU = 1'b0;
+	assign HPD_OVERRIDE = 1'b0;
 
 	/* These are currently unused, but may be used in the future */
-	assign SD_DAT1_T = 1'b0;
-	assign SD_DAT2_T = 1'b0;
 	assign FPGA_MISO = 1'b0;
 	assign I2S_DI1 = 1'b0;
-	assign DDC_SDA_PD = 1'b0;
-	assign HPD_OVERRIDE = 1'b0;
 	assign I2S_CDCLK1 = 1'b0;
 	assign I2S_DO0 = 1'b0;
 	assign I2S_LRCLK0 = 1'b0;
-	assign DDC_SDA_PU = 1'b0;
 	assign I2S_CLK0 = 1'b0;
 	assign LCD_CLK_T = 1'b0;
 
@@ -300,7 +260,6 @@ module kovan (
 	/* These allow us to do bank selection for the output register value */
 	assign output_bank[0] = LCD_HS;
 	assign output_bank[1] = LCD_VS;
-	assign reset_clock = LCD_DEN;
 
 	/* The actual output pins that go from the mux and feed to the CPU */
 	assign CAM_D[5]   = 1'b1; // Set OTG connected (due to miswiring)
@@ -320,31 +279,34 @@ module kovan (
 	assign LCD_G[3]   = output_reg[13];
 	assign LCD_G[4]   = output_reg[14];
 	assign LCD_G[5]   = output_reg[15];
-	assign LCD_B[0]   = free_timer[32]; // Timer overflow bit
 	assign LCD_B[5:1] = 0;
 	assign LCD_SUPP   = 0;
 
 
-	assign LCD_R[2] = SD_DO_T;
-	assign LCD_R[1] = !is_empty;
-	assign LCD_R[0] = is_full;
-
 
 	/* Poor-man's diagnostics */
-	wire diag_1, diag_2, diag_3, diag_4;
-	assign M_SERVO[0] = !diag_1;
-	assign M_SERVO[1] = !diag_2;
-	assign M_SERVO[2] = !diag_3;
-	assign M_SERVO[3] = !diag_4;
+	wire [3:0] diag;
+	assign M_SERVO[0]	= !diag[0];
+	assign M_SERVO[1]	= !diag[1];
+	assign M_SERVO[2]	= !diag[2];
+	assign M_SERVO[3]	= !diag[3];
+	assign FPGA_LED		= !diag[2];
 
+	assign LCD_R[1]		= !ap_bus_empty;
+	assign LCD_R[0]		= ap_bus_full;
+	assign ap_bus_read	= CAM_MCLKO;
+	assign ap_bus_reset	= LCD_DEN;
 
-	/* Turn do_read into a clock */
-	assign do_read_buf = CAM_MCLKO;
+	assign ap_sd_cs		= CAM_VCLKO;
+	assign ap_sd_di		= CAM_HSYNC;
+	assign ap_sd_clk	= CAM_VSYNC;
+	assign ap_sd_turnon	= CAM_VCLKI;
+
+	assign LCD_R[2]		= ap_sd_do;
 
 	assign clk26 = OSC_CLK;
 	IBUFG clk26buf_ibuf(.I(clk26), .O(clk26ibuf));
 	BUFG clk26buf_buf (.I(clk26ibuf), .O(clk26buf));
-
 
 	/* Multiply the incoming 26 MHz clock up to 125 MHz so we can build our
 	 * own edge detector.  We want to trigger an event on a rising edge of
@@ -356,21 +318,53 @@ module kovan (
 	);
 
 
-	/* Mux the output values */
-	always @(mem_output or output_bank) begin
-		if (output_bank == 2'b00) begin
-			output_reg[15:0] <= mem_output[15:0];
+	nand_fifo nand_fifo(
+		.CLK(clk125),
 
-		end else if (output_bank == 2'b01) begin
-			output_reg[15:0] <= mem_output[31:16];
+		/* Tap Board SD connections */
+		.TB_SD_CS(SD_CS_T),
+		.TB_SD_DI(SD_DI_T),
+		.TB_SD_CLK(SD_SCLK_T),
+		.TB_SD_TURNON(SD_TURNON_T),
+		.TB_SD_DO(SD_DO_T),
+		.TB_SD_DAT1(SD_DAT1_T),
+		.TB_SD_DAT2(SD_DAT2_T),
 
-		end else if (output_bank == 2'b10) begin
-			output_reg[15:0] <= mem_output[47:32];
+		/* Application Processor SD connections */
+		.AP_SD_CS(ap_sd_cs),
+		.AP_SD_DI(ap_sd_di),
+		.AP_SD_CLK(ap_sd_clk),
+		.AP_SD_TURNON(ap_sd_turnon),
+		.AP_SD_DO(ap_sd_do),
+		.AP_SD_DAT1(ap_sd_dat1),
+		.AP_SD_DAT2(ap_sd_dat2),
 
-		end else if (output_bank == 2'b11) begin
-			output_reg[15:0] <= mem_output[63:48];
-		end
-	end
+		/* 16-bit bus from FPGA to Application Processor */
+		.AP_BUS(output_reg),
+		.AP_BUS_EMPTY(ap_bus_empty),
+		.AP_BUS_FULL(ap_bus_full),
+		.AP_BUS_BANK(output_bank),
+		.AP_BUS_READ(ap_bus_read),
+		.AP_BUS_RESET(ap_bus_reset),
+		.AP_BUS_PAUSE(pause_writing),
+		.AP_BLOCK_SKIP(block_skip_input),
+
+		/* Wires and pins on the SD card side */
+		.NAND_D(nand_d),
+		.NAND_UK(nand_uk),
+		.NAND_ALE(nand_ale),
+		.NAND_CLE(nand_cle),
+		.NAND_WE(nand_we),
+		.NAND_CS(nand_cs),
+		.NAND_RE(nand_re),
+		.NAND_RB(nand_rb),
+
+		/* Miscellaneous outputs */
+		.FREE_COUNTER_OVERFLOW(LCD_B[0]),
+		.BUFFER_READ_LEVEL(rd_data_count),
+		.BUFFER_WRITE_LEVEL(wr_data_count),
+		.DIAGNOSTICS(diag)
+	);
 
 
 	/* I2C driver */
@@ -391,8 +385,6 @@ module kovan (
 		.i2c_device_addr(8'h3C),
 
 		/* Input bank 0 */
-		.reg_0(do_write_i2c_buf),
-		.reg_1(do_read_i2c_buf),
 		.reg_2(pause_writing),
 
 		/* Output bank 0 */
@@ -422,173 +414,5 @@ module kovan (
 		.reg_1e(wr_data_count[12:8]),
 		.reg_1f(wr_data_count[7:0])
 	);
-
-
-	/* Captured samples temporarily get stored here */
-	fifo sample_buffer(
-		.rst(1'b0),
-
-		.wr_en(do_write),
-		.wr_clk(clk125),
-
-		.rd_en(do_read),
-		.rd_clk(clk125),
-
-		.wr_data_count(wr_data_count),
-		.rd_data_count(rd_data_count),
-
-		.din(mem_input_d),
-		.dout(mem_output),
-
-		.full(is_full),
-		.empty(is_empty)
-	);
-
-
-	/* Once the buffer has filled up completely, let it drain first */
-	always @(posedge clk125) begin
-
-		/* "Filling" state.  Wait until is_full is set. */
-		if (fifo_drain_state == 1'b0) begin
-			fifo_has_drained <= 1'b1;
-			if (is_full)
-				fifo_drain_state <= 1'b1;
-		end
-
-		/* "Draining" state.  Wait until is_empty is set. */
-		else if (fifo_drain_state == 1'b1) begin
-			fifo_has_drained <= 1'b0;
-			if (is_empty)
-				fifo_drain_state <= 1'b0;
-		end
-	end
-
-
-	always @(posedge clk125) begin
-		do_read_s1 <= do_read_buf;
-		do_read_s2 <= do_read_s1;
-
-		/* Three-state machine to do reads */
-		if (do_read_s2 == do_read_buf_last) begin
-			did_read <= 0;
-			do_read <= 0;
-			do_read_buf_last <= do_read_s2;
-		end
-		else if (!did_read) begin
-			did_read <= 1;
-			do_read <= 1;
-			do_read_buf_last <= do_read_s2;
-		end else begin
-			did_read <= 1;
-			do_read <= 0;
-			do_read_buf_last <= do_read_s2;
-		end
-	end
-
-	/* Promary edge detector loop */
-	always @(posedge clk125) begin
-
-		/* Always tick the clock (or reset it) */
-		if (reset_clock) begin
-			free_timer <= 0;
-			do_write <= 0;
-			byte_counter <= 0;
-			block_skip <= block_skip;
-		end
-		else begin
-			if (((!previous_nand_re) & previous_previous_nand_re)
-			 | (((!previous_nand_we) & we_s2)) ) begin
-				if (block_skip > 0) begin
-					block_skip <= block_skip-1;
-					do_write <= 0;
-				end
-				else begin
-					block_skip <= 0;
-					do_write <= 1
-						  & fifo_has_drained
-						  & (!pause_writing);
-				end
-				byte_counter <= byte_counter+1;
-				block_skip_target <= block_skip_target;
-			end
-			else begin
-				do_write <= 0;
-				byte_counter <= byte_counter;
-
-				if (block_skip_input != block_skip_target) begin
-					block_skip        <= block_skip_input;
-					block_skip_target <= block_skip_input;
-				end
-				else begin
-					block_skip <= block_skip;
-					block_skip_target <= block_skip_target;
-				end
-			end
-			free_timer <= free_timer+1;
-		end
-
-		/* Pipeline the data one deep so we can 'reach back in time' */
-		mem_input[31:0]  <= free_timer;
-		mem_input[35:32] <= 4'b0000;
-		mem_input[43:36] <= NAND_D[7:0];
-		mem_input[44]    <= NAND_ALE;
-		mem_input[45]    <= NAND_CLE;
-		mem_input[46]    <= NAND_WE;
-		mem_input[47]    <= NAND_RE;
-		mem_input[48]    <= NAND_CS;
-		mem_input[49]    <= NAND_RB;
-		mem_input[59:50] <= NAND_UK[9:0];
-		mem_input[63:60] <= 0;
-
-		we_s1            <= WE;
-		we_s2            <= we_s1;
-		previous_nand_we <= we_s2;
-
-		rd_s1                     <= RE;
-		rd_s2                     <= rd_s1;
-		previous_nand_re          <= rd_s2;
-		previous_previous_nand_re <= previous_nand_re;
-
-
-		/* Compare the NAND read/write pins to determine if we have to
-		 * capture a sample and put it in the buffer
-		 */
-		if ((!previous_nand_we) && we_s2) begin
-			// grab from 'reach back' so *before* edge
-			mem_input_d[45:0]  <= mem_input[45:0];
-			mem_input_d[46]    <= 1'b1; // WE
-			mem_input_d[47]    <= 1'b0; // RE
-			mem_input_d[63:48] <= mem_input[63:48];
-		end
-		else if((!previous_nand_re) && previous_previous_nand_re) begin
-			// grab two cycles after falling edge,
-			// to give time for NAND to produce data
-			mem_input_d[31:0]  <= free_timer;
-			mem_input_d[35:32] <= 4'b0000;
-			mem_input_d[43:36] <= NAND_D[7:0];
-			mem_input_d[44]    <= NAND_ALE;
-			mem_input_d[45]    <= NAND_CLE;
-			mem_input_d[46]    <= 1'b0; // WE
-			mem_input_d[47]    <= 1'b1; // RE
-			mem_input_d[48]    <= NAND_CS;
-			mem_input_d[49]    <= NAND_RB;
-			mem_input_d[59:50] <= NAND_UK[9:0];
-			mem_input_d[63:60] <= 0;
-		end
-		else begin
-			mem_input_d[63:48] <= mem_input_d[63:48];
-			mem_input_d[47]    <= 1'b0; // clear these
-			mem_input_d[46]    <= 1'b0;
-			mem_input_d[45:0]  <= mem_input_d[45:0];
-		end
-
-	end
-
-	/* Debug */
-	assign FPGA_LED = fifo_has_drained;
-	assign diag_1 = do_write_i2c;
-	assign diag_2 = free_timer[3];
-	assign diag_3 = did_write_i2c;
-	assign diag_4 = do_write_i2c_buf;
 
 endmodule // kovan

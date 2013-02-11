@@ -7,6 +7,6 @@ isedir = /opt/Xilinx/14.3/ISE_DS
 xil_env = . $(isedir)/settings64.sh
 
 vfiles = ../verilog/kovan-sd.v ../verilog/fifo.v ../verilog/fast_clock.v \
-	 ../verilog/i2c_slave.v ../verilog/sync_reset.v
+	 ../verilog/i2c_slave.v ../verilog/sync_reset.v ../verilog/nand_fifo.v
 
 include xilinx.mk
