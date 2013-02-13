@@ -217,6 +217,7 @@ module nand_fifo (
 			do_write <= 0;
 			byte_counter <= 0;
 			block_skip <= block_skip;
+			fifo_drain_state <= 0;
 		end
 		else begin
 			if (((!previous_nand_re) & previous_previous_nand_re)
