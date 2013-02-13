@@ -92,7 +92,7 @@ module nand_fifo (
 
 
 	/* Standard FPGA counter */
-	reg  [32:0]   free_timer;
+	reg  [32:0]   free_counter;
 
 	/* Used as part of a rising-edge pulse-generator */
 	reg           do_write;
@@ -119,7 +119,6 @@ module nand_fifo (
 	reg           fifo_drain_state;
 	reg           fifo_has_drained;
 
-	reg  [32:0]	free_counter;
 	reg  [15:0]	bus_output;
 
 
@@ -214,7 +213,7 @@ module nand_fifo (
 
 		/* Always tick the clock (or reset it) */
 		if (AP_BUS_RESET) begin
-			free_timer <= 0;
+			free_counter <= 0;
 			do_write <= 0;
 			byte_counter <= 0;
 			block_skip <= block_skip;
@@ -248,11 +247,11 @@ module nand_fifo (
 					block_skip_target <= block_skip_target;
 				end
 			end
-			free_timer <= free_timer+1;
+			free_counter <= free_counter+1;
 		end
 
 		/* Pipeline the data one deep so we can 'reach back in time' */
-		mem_input[31:0]  <= free_timer;
+		mem_input[31:0]  <= free_counter;
 		mem_input[35:32] <= 4'b0000;
 		mem_input[43:36] <= NAND_D[7:0];
 		mem_input[44]    <= NAND_ALE;
@@ -287,7 +286,7 @@ module nand_fifo (
 		else if((!previous_nand_re) && previous_previous_nand_re) begin
 			// grab two cycles after falling edge,
 			// to give time for NAND to produce data
-			mem_input_d[31:0]  <= free_timer;
+			mem_input_d[31:0]  <= free_counter;
 			mem_input_d[35:32] <= 4'b0000;
 			mem_input_d[43:36] <= NAND_D[7:0];
 			mem_input_d[44]    <= NAND_ALE;
@@ -309,7 +308,7 @@ module nand_fifo (
 
 	/* Debug */
 	assign DIAGNOSTICS[0] = 1'b0;
-	assign DIAGNOSTICS[1] = free_timer[3];
+	assign DIAGNOSTICS[1] = free_counter[3];
 	assign DIAGNOSTICS[2] = 1'b0;
 	assign DIAGNOSTICS[3] = 1'b0;
 
