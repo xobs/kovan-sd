@@ -227,7 +227,7 @@ module kovan (
 
 
 	/* This is a special case.  It's miswired to USB_OTG_TYPE */
-	assign CAM_D[5] = 1;
+	assign CAM_D[5] = 1'b1;
 
 	/* These outputs are wired to vestigial hardware, and are unused */
 	assign MBOT = 1'b0;
@@ -262,7 +262,6 @@ module kovan (
 	assign output_bank[1] = LCD_VS;
 
 	/* The actual output pins that go from the mux and feed to the CPU */
-	assign CAM_D[5]   = 1'b1; // Set OTG connected (due to miswiring)
 	assign CAM_D[0]   = output_reg[0];
 	assign CAM_D[1]   = output_reg[1];
 	assign CAM_D[2]   = output_reg[2];
