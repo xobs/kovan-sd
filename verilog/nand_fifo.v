@@ -214,45 +214,6 @@ module nand_fifo (
 	/* Promary edge detector loop */
 	always @(posedge CLK) begin
 
-		/* Always tick the clock (or reset it) */
-		if (AP_BUS_RESET) begin
-			free_counter <= 0;
-			do_write <= 0;
-			byte_counter <= 0;
-			block_skip <= block_skip;
-		end
-		else begin
-			if (((!re_buf3) & re_buf4)
-			 | (((!we_buf2) & we_buf3)) ) begin
-				if (block_skip > 0) begin
-					block_skip <= block_skip-1;
-					do_write <= 0;
-				end
-				else begin
-					block_skip <= 0;
-					do_write <= 1
-						  & fifo_has_drained
-						  & (!AP_BUS_PAUSE);
-				end
-				byte_counter <= byte_counter+1;
-				block_skip_target <= block_skip_target;
-			end
-			else begin
-				do_write <= 0;
-				byte_counter <= byte_counter;
-
-				if (AP_BLOCK_SKIP != block_skip_target) begin
-					block_skip        <= AP_BLOCK_SKIP;
-					block_skip_target <= AP_BLOCK_SKIP;
-				end
-				else begin
-					block_skip <= block_skip;
-					block_skip_target <= block_skip_target;
-				end
-			end
-			free_counter <= free_counter+1;
-		end
-
 		/* Pipeline the data one deep so we can 'reach back in time' */
 		mem_input[31:0]  <= free_counter;
 		mem_input[35:32] <= 4'b0000;
@@ -273,7 +234,7 @@ module nand_fifo (
 		re_buf1		<= NAND_RE;
 		re_buf2		<= re_buf1;
 		re_buf3		<= re_buf2;
-		re_buf4 	<= re_buf3;;
+		re_buf4 	<= re_buf3;
 
 		ale_buf1	<= NAND_ALE;
 		ale_buf2	<= ale_buf1;
@@ -283,36 +244,80 @@ module nand_fifo (
 		cle_buf2	<= cle_buf1;
 		cle_buf3	<= cle_buf2;
 
-		/* Compare the NAND read/write pins to determine if we have to
-		 * capture a sample and put it in the buffer
-		 */
-		if ((!we_buf3) && we_buf2) begin
-			// grab from 'reach back' so *before* edge
-			mem_input_d[45:0]  <= mem_input[45:0];
-			mem_input_d[46]    <= 1'b1; // WE
-			mem_input_d[47]    <= 1'b0; // RE
-			mem_input_d[63:48] <= mem_input[63:48];
-		end
-		else if((!re_buf3) && re_buf4) begin
-			// grab two cycles after falling edge,
-			// to give time for NAND to produce data
-			mem_input_d[31:0]  <= free_counter;
-			mem_input_d[35:32] <= 4'b0000;
-			mem_input_d[43:36] <= NAND_D[7:0];
-			mem_input_d[44]    <= NAND_ALE;
-			mem_input_d[45]    <= NAND_CLE;
-			mem_input_d[46]    <= 1'b0; // WE
-			mem_input_d[47]    <= 1'b1; // RE
-			mem_input_d[48]    <= NAND_CS;
-			mem_input_d[49]    <= NAND_RB;
-			mem_input_d[59:50] <= NAND_UK[9:0];
-			mem_input_d[63:60] <= 0;
+
+		/* Always tick the clock (or reset it) */
+		if (AP_BUS_RESET) begin
+			free_counter <= 0;
+			do_write <= 0;
+			byte_counter <= 0;
+			mem_input_d[63:0]  <= 0;
+			block_skip <= block_skip;
 		end
 		else begin
-			mem_input_d[63:48] <= mem_input_d[63:48];
-			mem_input_d[47]    <= 1'b0; // clear these
-			mem_input_d[46]    <= 1'b0;
-			mem_input_d[45:0]  <= mem_input_d[45:0];
+			if (((re_buf3) && !re_buf4)
+			|| (((we_buf2) && !we_buf3)) ) begin
+				if (we_buf2 && !we_buf3) begin
+					// Grab from 'reach back' so
+					// *before* edge
+					mem_input_d[45:0]  <= mem_input[45:0];
+					mem_input_d[46]    <= 1'b1; // WE
+					mem_input_d[47]    <= 1'b0; // RE
+					mem_input_d[63:48] <= mem_input[63:48];
+				end
+
+				// grab two cycles after falling edge,
+				// to give time for NAND to produce data
+				else if(re_buf3 && !re_buf4) begin
+					mem_input_d[31:0]  <= free_counter;
+					mem_input_d[35:32] <= 4'b0000;
+					mem_input_d[43:36] <= NAND_D[7:0];
+					mem_input_d[44]    <= NAND_ALE;
+					mem_input_d[45]    <= NAND_CLE;
+					mem_input_d[46]    <= 1'b0; // WE
+					mem_input_d[47]    <= 1'b1; // RE
+					mem_input_d[48]    <= NAND_CS;
+					mem_input_d[49]    <= NAND_RB;
+					mem_input_d[59:50] <= NAND_UK[9:0];
+					mem_input_d[63:60] <= 0;
+				end
+				else begin
+					mem_input_d[63:48] <=mem_input_d[63:48];
+					mem_input_d[47]    <= 1'b0;
+					mem_input_d[46]    <= 1'b0;
+					mem_input_d[45:0]  <= mem_input_d[45:0];
+				end
+
+				if (block_skip > 0) begin
+					block_skip <= block_skip-1;
+					do_write <= 0;
+				end
+				else begin
+					block_skip <= 0;
+					do_write <= 1
+						  & fifo_has_drained
+						  & (!AP_BUS_PAUSE);
+				end
+				byte_counter <= byte_counter+1;
+				block_skip_target <= block_skip_target;
+			end
+			else begin
+				do_write		<= 0;
+				byte_counter		<= byte_counter;
+				mem_input_d[63:48]	<= mem_input_d[63:48];
+				mem_input_d[47]		<= 1'b0;
+				mem_input_d[46]		<= 1'b0;
+				mem_input_d[45:0]	<= mem_input_d[45:0];
+
+				if (AP_BLOCK_SKIP != block_skip_target) begin
+					block_skip        <= AP_BLOCK_SKIP;
+					block_skip_target <= AP_BLOCK_SKIP;
+				end
+				else begin
+					block_skip <= block_skip;
+					block_skip_target <= block_skip_target;
+				end
+			end
+			free_counter <= free_counter+1;
 		end
 	end
 
