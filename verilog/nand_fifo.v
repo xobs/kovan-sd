@@ -88,36 +88,34 @@ module nand_fifo (
  
 
 	/* This set of wires comes out of the FIFO, and feeds into a mux */
-	wire [63:0]   mem_output;
+	wire [63:0]	mem_output;
 
 
 	/* Standard FPGA counter */
-	reg  [32:0]   free_counter;
+	reg  [32:0]	free_counter;
 
 	/* Used as part of a rising-edge pulse-generator */
-	reg           do_write;
-	reg           did_read;
-	reg           do_read;
-	reg           do_read_s1;
-	reg           do_read_s2;
-	reg           do_read_buf_last;
+	reg		do_write;
+	reg		did_read;
+	reg		do_read;
+	reg		do_read_s1;
+	reg		do_read_s2;
+	reg		do_read_buf_last;
  
 	/* Master chunk of BRAM.  When a sample is taken, it's stored here. */
-	reg  [63:0]   mem_input;
-	reg  [63:0]   mem_input_d; /* Buffer one sample back in time */
-	reg           we_s1, we_s2;
-	reg           rd_s1, rd_s2;
+	reg  [63:0]	mem_input;
+	reg  [63:0]	mem_input_d; /* Buffer one sample back in time */
+	reg		we_buf1, we_buf2, we_buf3;
+	reg		re_buf1, re_buf2, re_buf3, re_buf4;
+	reg		ale_buf1, ale_buf2, ale_buf3;
+	reg		cle_buf1, cle_buf2, cle_buf3;
 
-	reg           previous_nand_we;
-	reg           previous_nand_re;
-	reg           previous_previous_nand_re;
+	reg  [31:0]	byte_counter;
+	reg  [31:0]	block_skip;
+	reg  [31:0]	block_skip_target;
 
-	reg  [31:0]   byte_counter;
-	reg  [31:0]   block_skip;
-	reg  [31:0]   block_skip_target;
-
-	reg           fifo_drain_state;
-	reg           fifo_has_drained;
+	reg		fifo_drain_state;
+	reg		fifo_has_drained;
 
 	reg  [15:0]	bus_output;
 
@@ -184,6 +182,11 @@ module nand_fifo (
 			if (AP_BUS_EMPTY)
 				fifo_drain_state <= 1'b0;
 		end
+
+		else begin
+			fifo_drain_state <= 1'b0;
+			fifo_has_drained <= 1'b0;
+		end
 	end
 
 
@@ -217,11 +220,10 @@ module nand_fifo (
 			do_write <= 0;
 			byte_counter <= 0;
 			block_skip <= block_skip;
-			fifo_drain_state <= 0;
 		end
 		else begin
-			if (((!previous_nand_re) & previous_previous_nand_re)
-			 | (((!previous_nand_we) & we_s2)) ) begin
+			if (((!re_buf3) & re_buf4)
+			 | (((!we_buf2) & we_buf3)) ) begin
 				if (block_skip > 0) begin
 					block_skip <= block_skip-1;
 					do_write <= 0;
@@ -264,27 +266,34 @@ module nand_fifo (
 		mem_input[59:50] <= NAND_UK[9:0];
 		mem_input[63:60] <= 0;
 
-		we_s1            <= NAND_WE;
-		we_s2            <= we_s1;
-		previous_nand_we <= we_s2;
+		we_buf1		<= NAND_WE;
+		we_buf2		<= we_buf1;
+		we_buf3		<= we_buf2;
 
-		rd_s1                     <= NAND_RE;
-		rd_s2                     <= rd_s1;
-		previous_nand_re          <= rd_s2;
-		previous_previous_nand_re <= previous_nand_re;
+		re_buf1		<= NAND_RE;
+		re_buf2		<= re_buf1;
+		re_buf3		<= re_buf2;
+		re_buf4 	<= re_buf3;;
 
+		ale_buf1	<= NAND_ALE;
+		ale_buf2	<= ale_buf1;
+		ale_buf3	<= ale_buf2;
+
+		cle_buf1	<= NAND_CLE;
+		cle_buf2	<= cle_buf1;
+		cle_buf3	<= cle_buf2;
 
 		/* Compare the NAND read/write pins to determine if we have to
 		 * capture a sample and put it in the buffer
 		 */
-		if ((!previous_nand_we) && we_s2) begin
+		if ((!we_buf3) && we_buf2) begin
 			// grab from 'reach back' so *before* edge
 			mem_input_d[45:0]  <= mem_input[45:0];
 			mem_input_d[46]    <= 1'b1; // WE
 			mem_input_d[47]    <= 1'b0; // RE
 			mem_input_d[63:48] <= mem_input[63:48];
 		end
-		else if((!previous_nand_re) && previous_previous_nand_re) begin
+		else if((!re_buf3) && re_buf4) begin
 			// grab two cycles after falling edge,
 			// to give time for NAND to produce data
 			mem_input_d[31:0]  <= free_counter;
