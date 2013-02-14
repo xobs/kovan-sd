@@ -56,27 +56,30 @@
 // "Clock    Freq (MHz) (degrees) Cycle (%) Jitter (ps)  Error (ps)"
 //----------------------------------------------------------------------------
 // CLK_OUT1___124.802______0.000______50.0______283.306____227.068
+// CLK_OUT2____26.000______0.000______50.0______427.987____227.068
 //
 //----------------------------------------------------------------------------
 // "Input Clock   Freq (MHz)    Input Jitter (UI)"
 //----------------------------------------------------------------------------
-// __primary__________26.000____________0.010
+// __primary______________26____________0.010
 
 `timescale 1ps/1ps
 
-(* CORE_GENERATION_INFO = "fast_clock,clk_wiz_v3_6,{component_name=fast_clock,use_phase_alignment=true,use_min_o_jitter=false,use_max_i_jitter=false,use_dyn_phase_shift=false,use_inclk_switchover=false,use_dyn_reconfig=false,feedback_source=FDBK_AUTO,primtype_sel=PLL_BASE,num_out_clk=1,clkin1_period=38.461,clkin2_period=38.461,use_power_down=false,use_reset=false,use_locked=false,use_inclk_stopped=false,use_status=false,use_freeze=false,use_clk_valid=false,feedback_type=SINGLE,clock_mgr_type=AUTO,manual_override=false}" *)
+(* CORE_GENERATION_INFO = "fast_clock,clk_wiz_v3_6,{component_name=fast_clock,use_phase_alignment=true,use_min_o_jitter=false,use_max_i_jitter=false,use_dyn_phase_shift=false,use_inclk_switchover=false,use_dyn_reconfig=false,feedback_source=FDBK_AUTO,primtype_sel=PLL_BASE,num_out_clk=2,clkin1_period=38.461,clkin2_period=38.461,use_power_down=false,use_reset=true,use_locked=true,use_inclk_stopped=false,use_status=false,use_freeze=false,use_clk_valid=false,feedback_type=SINGLE,clock_mgr_type=AUTO,manual_override=false}" *)
 module fast_clock
  (// Clock in ports
   input         CLK_IN1,
   // Clock out ports
-  output        CLK_OUT1
+  output        CLK_OUT1,
+  output        CLK_OUT2,
+  // Status and control signals
+  input         RESET,
+  output        LOCKED
  );
 
   // Input buffering
   //------------------------------------
-  BUFG clkin1_buf
-   (.O (clkin1),
-    .I (CLK_IN1));
+  assign clkin1 = CLK_IN1;
 
 
   // Clocking primitive
@@ -86,10 +89,8 @@ module fast_clock
   //    * Unused outputs are labeled unused
   wire [15:0] do_unused;
   wire        drdy_unused;
-  wire        locked_unused;
   wire        clkfbout;
   wire        clkfbout_buf;
-  wire        clkout1_unused;
   wire        clkout2_unused;
   wire        clkout3_unused;
   wire        clkout4_unused;
@@ -105,19 +106,23 @@ module fast_clock
     .CLKOUT0_DIVIDE         (5),
     .CLKOUT0_PHASE          (0.000),
     .CLKOUT0_DUTY_CYCLE     (0.500),
+    .CLKOUT1_DIVIDE         (24),
+    .CLKOUT1_PHASE          (0.000),
+    .CLKOUT1_DUTY_CYCLE     (0.500),
     .CLKIN_PERIOD           (38.461),
     .REF_JITTER             (0.010))
   pll_base_inst
     // Output clocks
    (.CLKFBOUT              (clkfbout),
     .CLKOUT0               (clkout0),
-    .CLKOUT1               (clkout1_unused),
+    .CLKOUT1               (clkout1),
     .CLKOUT2               (clkout2_unused),
     .CLKOUT3               (clkout3_unused),
     .CLKOUT4               (clkout4_unused),
     .CLKOUT5               (clkout5_unused),
-    .LOCKED                (locked_unused),
-    .RST                   (1'b0),
+    // Status and control signals
+    .LOCKED                (LOCKED),
+    .RST                   (RESET),
      // Input clock control
     .CLKFBIN               (clkfbout_buf),
     .CLKIN                 (clkin1));
@@ -133,6 +138,10 @@ module fast_clock
    (.O   (CLK_OUT1),
     .I   (clkout0));
 
+
+  BUFG clkout2_buf
+   (.O   (CLK_OUT2),
+    .I   (clkout1));
 
 
 
