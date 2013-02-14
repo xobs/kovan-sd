@@ -164,7 +164,8 @@ module kovan (
 	wire		clk26;
 	wire		clk26ibuf;
 	wire		clk26buf;
-	wire		clk125;
+	wire		clk130;
+	wire		clk26out;
  
 
 	/* This set of wires comes out of the FIFO, and feeds into a mux */
@@ -198,20 +199,24 @@ module kovan (
 	wire [12:0]	wr_data_count;
 	wire [12:0]	rd_data_count;
 
-	wire [1:0]    output_bank;
-	wire [15:0]   output_reg;
+	wire [1:0]	output_bank;
+	wire [15:0]	output_reg;
 
-	wire          SDA_pd;
-	wire          SDA_int;
+	wire		SDA_pd;
+	wire		SDA_int;
 
-	reg           previous_nand_we;
-	reg           previous_nand_re;
-	reg           previous_previous_nand_re;
+	reg		previous_nand_we;
+	reg		previous_nand_re;
+	reg		previous_previous_nand_re;
 
-	reg  [31:0]   byte_counter;
-	reg  [31:0]   block_skip;
-	reg  [31:0]   block_skip_target;
-	wire [31:0]   block_skip_input;
+	reg  [31:0]	byte_counter;
+	wire [31:0]	block_skip_input;
+	reg  [31:0]	block_skip_buf1;
+	reg  [31:0]	block_skip_buf2;
+
+	wire		pause_writing;
+	reg		pause_writing_buf1;
+	reg		pause_writing_buf2;
 
 	/* Convenience renaming of signals (mapping from tap board names to
 	 * informative meanings)
@@ -289,7 +294,7 @@ module kovan (
 	assign M_SERVO[1]	= !diag[1];
 	assign M_SERVO[2]	= !diag[2];
 	assign M_SERVO[3]	= !diag[3];
-	assign FPGA_LED		= !diag[2];
+	assign FPGA_LED		= !diag[1];
 
 	assign LCD_R[1]		= !ap_bus_empty;
 	assign LCD_R[0]		= ap_bus_full;
@@ -307,18 +312,27 @@ module kovan (
 	IBUFG clk26buf_ibuf(.I(clk26), .O(clk26ibuf));
 	BUFG clk26buf_buf (.I(clk26ibuf), .O(clk26buf));
 
-	/* Multiply the incoming 26 MHz clock up to 125 MHz so we can build our
+	/* Multiply the incoming 26 MHz clock up to 130 MHz so we can build our
 	 * own edge detector.  We want to trigger an event on a rising edge of
 	 * NAND_WE or the falling edge of NAND_RE.
 	 */
 	fast_clock fast_clock(
-		.CLK_IN1(clk26ibuf),
-		.CLK_OUT1(clk125)
+		.CLK_IN1(clk26buf),
+		.CLK_OUT1(clk130),
+		.CLK_OUT2(clk26out),
+		.RESET(1'b0)
 	);
 
 
+	always @(posedge clk130) begin
+		block_skip_buf1 <= block_skip_input;
+		block_skip_buf2 <= block_skip_buf1;
+		pause_writing_buf1 <= pause_writing;
+		pause_writing_buf2 <= pause_writing_buf1;
+	end
+
 	nand_fifo nand_fifo(
-		.CLK(clk125),
+		.CLK(clk130),
 
 		/* Tap Board SD connections */
 		.TB_SD_CS(SD_CS_T),
@@ -345,8 +359,8 @@ module kovan (
 		.AP_BUS_BANK(output_bank),
 		.AP_BUS_READ(ap_bus_read),
 		.AP_BUS_RESET(ap_bus_reset),
-		.AP_BUS_PAUSE(pause_writing),
-		.AP_BLOCK_SKIP(block_skip_input),
+		.AP_BUS_PAUSE(pause_writing_buf2),
+		.AP_BLOCK_SKIP(block_skip_buf2),
 
 		/* Wires and pins on the SD card side */
 		.NAND_D(nand_d),
@@ -378,7 +392,7 @@ module kovan (
 		.SDA(SDA_int),
 		.SDA_pd(SDA_pd),
 
-		.clk(clk26buf),
+		.clk(clk26out),
 		.glbl_reset(1'b0),
 
 		.i2c_device_addr(8'h3C),
@@ -404,10 +418,6 @@ module kovan (
 		.reg_13(block_skip_input[7:0]),
 
 		/* Output bank 1 */
-		.reg_18(block_skip[31:24]),
-		.reg_19(block_skip[23:16]),
-		.reg_1a(block_skip[15:8]),
-		.reg_1b(block_skip[7:0]),
 		.reg_1c(rd_data_count[12:8]),
 		.reg_1d(rd_data_count[7:0]),
 		.reg_1e(wr_data_count[12:8]),
