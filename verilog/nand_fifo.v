@@ -75,7 +75,8 @@ module nand_fifo (
 		output wire		FREE_COUNTER_OVERFLOW,
 		output wire [12:0]	BUFFER_READ_LEVEL,
 		output wire [12:0]	BUFFER_WRITE_LEVEL,
-		output wire [3:0]	DIAGNOSTICS
+		output wire [3:0]	DIAGNOSTICS,
+		output wire [31:0]	BYTE_COUNTER
 	);
 
 	assign TB_SD_CS		= AP_SD_CS;
@@ -110,9 +111,9 @@ module nand_fifo (
 	reg		ale_buf1, ale_buf2, ale_buf3;
 	reg		cle_buf1, cle_buf2, cle_buf3;
 
-	reg  [31:0]	byte_counter;
 	reg  [31:0]	block_skip;
 	reg  [31:0]	block_skip_target;
+	reg  [31:0]	byte_counter;
 
 	reg		fifo_drain_state;
 	reg		fifo_has_drained;
@@ -121,8 +122,9 @@ module nand_fifo (
 
 
 
-	assign FREE_COUNTER		= free_counter[31:0];
+	assign FREE_COUNTER[31:0]	= free_counter[31:0];
 	assign FREE_COUNTER_OVERFLOW	= free_counter[32];
+	assign BYTE_COUNTER[31:0]	= byte_counter[31:0];
 
 	assign AP_BUS			= bus_output;
 
