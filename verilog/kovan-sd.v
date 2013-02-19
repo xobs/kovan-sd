@@ -209,7 +209,7 @@ module kovan (
 	reg		previous_nand_re;
 	reg		previous_previous_nand_re;
 
-	reg  [31:0]	byte_counter;
+	wire [31:0]	byte_counter;
 	wire [31:0]	block_skip_input;
 	reg  [31:0]	block_skip_buf1;
 	reg  [31:0]	block_skip_buf2;
@@ -376,7 +376,8 @@ module kovan (
 		.FREE_COUNTER_OVERFLOW(LCD_B[0]),
 		.BUFFER_READ_LEVEL(rd_data_count),
 		.BUFFER_WRITE_LEVEL(wr_data_count),
-		.DIAGNOSTICS(diag)
+		.DIAGNOSTICS(diag),
+		.BYTE_COUNTER(byte_counter)
 	);
 
 
