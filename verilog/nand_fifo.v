@@ -256,7 +256,7 @@ module nand_fifo (
 			block_skip <= block_skip;
 		end
 		else begin
-			if (((re_buf3) && !re_buf4)
+			if (((re_buf2) && !re_buf3)
 			|| (((we_buf2) && !we_buf3)) ) begin
 				if (we_buf2 && !we_buf3) begin
 					// Grab from 'reach back' so
@@ -269,18 +269,11 @@ module nand_fifo (
 
 				// grab two cycles after falling edge,
 				// to give time for NAND to produce data
-				else if(re_buf3 && !re_buf4) begin
-					mem_input_d[31:0]  <= free_counter;
-					mem_input_d[35:32] <= 4'b0000;
-					mem_input_d[43:36] <= NAND_D[7:0];
-					mem_input_d[44]    <= NAND_ALE;
-					mem_input_d[45]    <= NAND_CLE;
+				else if(re_buf2 && !re_buf3) begin
+					mem_input_d[45:0]  <= mem_input[45:0];
 					mem_input_d[46]    <= 1'b0; // WE
 					mem_input_d[47]    <= 1'b1; // RE
-					mem_input_d[48]    <= NAND_CS;
-					mem_input_d[49]    <= NAND_RB;
-					mem_input_d[59:50] <= NAND_UK[9:0];
-					mem_input_d[63:60] <= 0;
+					mem_input_d[63:48] <= mem_input[63:48];
 				end
 				else begin
 					mem_input_d[63:48] <=mem_input_d[63:48];
